@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Đọc tin nhắn Zalo mà phía bên kia không thấy “đã xem”: đoạn chat vẫn giữ chữ đậm như chưa đọc. Kèm tắt “đang nhập...” và chống thu hồi tin nhắn. Áp dụng cho mọi người và mọi nhóm, chỉ trên máy này. Trong Zalo cũng có nút “ZUS” ở màn hình chat để mở nhanh bảng công tắc này.</string>
+			<key>label</key>
+			<string>ZUS</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.anhdang.zalounseen/prefsChanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.anhdang.zalounseen</string>
+			<key>key</key>
+			<string>enabled</string>
+			<key>label</key>
+			<string>Bật ZUS</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.anhdang.zalounseen/prefsChanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.anhdang.zalounseen</string>
+			<key>key</key>
+			<string>unseen</string>
+			<key>label</key>
+			<string>Chặn “đã xem” khi đọc tin</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.anhdang.zalounseen/prefsChanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.anhdang.zalounseen</string>
+			<key>key</key>
+			<string>hideTyping</string>
+			<key>label</key>
+			<string>Tắt “đang nhập...”</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>“Đã nhận” mặc định vẫn chặn như bản 1.0.6; tắt đi thì người kia thấy tin đã tới máy nhưng vẫn không thấy “đã xem”. Chống thu hồi: tin nhắn bị thu hồi vẫn hiện nguyên nội dung trên máy này.</string>
+			<key>label</key>
+			<string>Tính năng thêm</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.anhdang.zalounseen/prefsChanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.anhdang.zalounseen</string>
+			<key>key</key>
+			<string>hideDelivered</string>
+			<key>label</key>
+			<string>Chặn “đã nhận”</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.anhdang.zalounseen/prefsChanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.anhdang.zalounseen</string>
+			<key>key</key>
+			<string>antiRecall</string>
+			<key>label</key>
+			<string>Chống thu hồi tin nhắn</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.anhdang.zalounseen/prefsChanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.anhdang.zalounseen</string>
+			<key>key</key>
+			<string>keepAwake</string>
+			<key>label</key>
+			<string>Giữ màn hình sáng khi dùng Zalo</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.anhdang.zalounseen/prefsChanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.anhdang.zalounseen</string>
+			<key>key</key>
+			<string>storyDownload</string>
+			<key>label</key>
+			<string>Tải Story về máy</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.anhdang.zalounseen/prefsChanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.anhdang.zalounseen</string>
+			<key>key</key>
+			<string>privacyShield</string>
+			<key>label</key>
+			<string>Che nội dung khi thoát ra đa nhiệm</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.anhdang.zalounseen/prefsChanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.anhdang.zalounseen</string>
+			<key>key</key>
+			<string>inAppUI</string>
+			<key>label</key>
+			<string>Nút cài đặt trong Zalo</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.anhdang.zalounseen/prefsChanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.anhdang.zalounseen</string>
+			<key>key</key>
+			<string>longPressTab</string>
+			<key>label</key>
+			<string>Ấn giữ thanh tab mở bảng ZUS</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Log đầy đủ nằm trong thư mục Documents của Zalo: Filza → Apps → Zalo → Documents → ZUS.log. Gửi file đó cho mình khi cần kiểm tra.</string>
+			<key>label</key>
+			<string>Gỡ lỗi</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.anhdang.zalounseen/prefsChanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.anhdang.zalounseen</string>
+			<key>key</key>
+			<string>debug</string>
+			<key>label</key>
+			<string>Ghi log gỡ lỗi</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>showDiag</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>Xem trạng thái dò</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>ZUS 1.3.3 • com.anhdang.zalounseen</string>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>ZUS</string>
+</dict>
+</plist>

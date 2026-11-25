@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>ZUS là bản dùng thật — phải có key kích hoạt hợp lệ mới sử dụng được. Chưa kích hoạt thì mọi chức năng đều tắt, kể cả trang cài đặt này. Cách kích hoạt: mở Zalo, bảng ZUS sẽ hiện ô nhập key (hoặc ấn giữ thanh tab dưới đáy Zalo để mở bảng, vào thẻ Thông tin, mục Bản quyền, chọn “Nhập key kích hoạt”). Kích hoạt xong quay lại đây, trang cài đặt đầy đủ sẽ tự mở ra.</string>
+			<key>label</key>
+			<string>ZUS — Chưa kích hoạt</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSTitleValueSpecifier</string>
+			<key>default</key>
+			<string>Chưa kích hoạt</string>
+			<key>label</key>
+			<string>Trạng thái</string>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>ZUS</string>
+</dict>
+</plist>
