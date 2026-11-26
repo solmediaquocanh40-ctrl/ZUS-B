@@ -1,4 +1,4 @@
-// ZUS 1.3.7 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.3.8 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
 //
 // 1.3.4 — SỬA 3 LỖI ANH CHỐT NGÀY 2026-11-27:
 // (1) "Đang gửi": cửa chung InboxDataManager.processUpdateStatus…withNewStatus:
@@ -20,6 +20,16 @@
 //     ảnh gốc / emoji / dò cuộc gọi / dò undo / dò kho / quảng cáo / link) khi
 //     tính năng tương ứng đang bật — bật giữa chừng thì lắp lúc đổi cài đặt.
 //     Lõi 45 cửa giữ nguyên byte-identical.
+//
+// 1.3.8 — SỬA ĐÚNG THỦ PHẠM VĂNG KHI MỞ BẢNG: log 1.3.7 dừng ngay giữa
+// viewDidLoad (sau dòng bản quyền của ZUSLoadPrefs, trước dòng bước 1/3)
+// → lỗi nằm ở đoạn dựng view. Thủ phạm: vòng dựng 4 nút tab kích hoạt ràng
+// buộc (activateConstraints) trỏ tới `bar` TRƯỚC khi nút được addSubview
+// vào bar — hai view chưa chung hệ phân cấp, iOS ném NSGenericException
+// "Unable to install constraint on view... outside the subtree". Sửa: gắn
+// nút vào thanh trước, kích hoạt ràng buộc sau (mọi chỗ khác trong bản
+// cinematic vốn đã đúng thứ tự này). Các lớp bắt lỗi + đánh dấu bước của
+// 1.3.7 giữ lại làm bảo hiểm.
 //
 // 1.3.7 — BẮT LỖI VĂNG KHI MỞ BẢNG CỦA 1.3.6 (báo cáo + .ips của anh
 // 2026-11-27 02:02): ấn-giữ tab mở bảng là Zalo văng (EXC_CRASH/SIGABRT,
@@ -2496,7 +2506,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.3.7";
+    prof[@"_version"] = @"1.3.8";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -2655,6 +2665,7 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
     if (self.navigationController) self.navigationController.navigationBar.prefersLargeTitles = NO;
     // 1.3.5: nền cinematic toàn bảng (chỉ hiện ở bộ màu Tối/Cinematic —
     // các bộ màu khác giữ nền phẳng như cũ).
+    ZUSLog(@"bảng ZUS: bước 0/3 — dựng nền + thanh tab + bảng");
     UIImageView *bgv = [[UIImageView alloc] initWithImage:ZUSAssetImage(@"bg")];
     bgv.contentMode = UIViewContentModeScaleAspectFill;
     bgv.clipsToBounds = YES;
@@ -2687,6 +2698,12 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         lb.textAlignment = NSTextAlignmentCenter;
         lb.translatesAutoresizingMaskIntoConstraints = NO;
         [b addSubview:lb];
+        // 1.3.8: PHẢI gắn nút vào thanh TRƯỚC khi kích hoạt ràng buộc —
+        // 1.3.5–1.3.7 kích hoạt ràng buộc tới `bar` khi nút chưa nằm trong
+        // hệ phân cấp của bar, iOS ném NSGenericException "Unable to
+        // install constraint on view" làm Zalo văng ngay khi mở bảng
+        // (log 1.3.7 dừng đúng giữa viewDidLoad, trước dòng bước 1/3).
+        [bar addSubview:b];
         [NSLayoutConstraint activateConstraints:@[
             [iv.topAnchor constraintEqualToAnchor:b.topAnchor constant:6],
             [iv.centerXAnchor constraintEqualToAnchor:b.centerXAnchor],
@@ -2701,7 +2718,6 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
             [b.leadingAnchor constraintEqualToAnchor:prevBtn ? prevBtn.trailingAnchor : bar.leadingAnchor],
         ]];
         [b addTarget:self action:@selector(zu_tabTap:) forControlEvents:UIControlEventTouchUpInside];
-        [bar addSubview:b];
         [btns addObject:b];
         prevBtn = b;
     }
@@ -2729,6 +2745,7 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         [tv.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [tv.bottomAnchor constraintEqualToAnchor:bar.topAnchor],
     ]];
+    ZUSLog(@"bảng ZUS: bước 0/3 xong — nền + thanh tab + bảng đã dựng");
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(zu_refresh) name:@"ZUSLicenseChanged" object:nil];
     [self zus_updateLicenseVeil];
     // 1.3.7 chẩn đoán văng khi mở bảng (1.3.6): đánh dấu từng bước + bắt
@@ -2924,7 +2941,7 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         [secs addObject:@{@"header": @"Trạng thái", @"rows": @[
             @{@"kind": @"action", @"title": @"Xem trạng thái dò", @"act": @"diag", @"icon": @"eye"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.3.7 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.3.8 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -5739,7 +5756,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.3.7 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.3.8 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
