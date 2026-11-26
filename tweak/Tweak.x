@@ -1,4 +1,4 @@
-// ZUS 1.3.6 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.3.7 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
 //
 // 1.3.4 — SỬA 3 LỖI ANH CHỐT NGÀY 2026-11-27:
 // (1) "Đang gửi": cửa chung InboxDataManager.processUpdateStatus…withNewStatus:
@@ -20,6 +20,16 @@
 //     ảnh gốc / emoji / dò cuộc gọi / dò undo / dò kho / quảng cáo / link) khi
 //     tính năng tương ứng đang bật — bật giữa chừng thì lắp lúc đổi cài đặt.
 //     Lõi 45 cửa giữ nguyên byte-identical.
+//
+// 1.3.7 — BẮT LỖI VĂNG KHI MỞ BẢNG CỦA 1.3.6 (báo cáo + .ips của anh
+// 2026-11-27 02:02): ấn-giữ tab mở bảng là Zalo văng (EXC_CRASH/SIGABRT,
+// ngoại lệ không bắt trên luồng chính). File .ips bị Crashlytics của Zalo
+// nuốt mất lý do ngoại lệ nên không đọc được dòng gây lỗi; đối chiếu log
+// thì bảng 1.3.4 mở 4 lần/phiên bình thường → lỗi nằm ở code giao diện mới.
+// Bản này bọc @try/@catch + ghi log từng bước quanh các đoạn mới (đuôi
+// viewDidLoad, heightForRow, 3 ô hero/stats/journal, chuyển tab, thẻ kho):
+// nếu ngoại lệ nằm trong các đoạn này, bảng KHÔNG văng nữa (ô lỗi rơi về ô
+// thường) và ZUS.log ghi đích danh tên + lý do ngoại lệ để sửa dứt điểm.
 //
 // 1.3.6 — SỬA LỖI BUILD CỦA 1.3.5: bản 1.3.5 chết khi biên dịch vì em thêm
 // TRÙNG cặp willDisplayHeader/FooterView (bảng ZUS vốn đã có sẵn một cặp từ
@@ -1911,6 +1921,7 @@ static NSArray *ZUSMissingFriendsFromPath(NSString *path) {
     cell.backgroundColor = [UIColor clearColor];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
     NSDictionary *e = self.zusEntries[(NSUInteger)indexPath.row];
+  @try {
     NSString *name = [e[@"sender"] length] ? e[@"sender"] : ([e[@"chat"] length] ? e[@"chat"] : @"Đoạn chat");
     UIView *card = [[UIView alloc] initWithFrame:CGRectZero];
     card.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.09];
@@ -1992,6 +2003,15 @@ static NSArray *ZUSMissingFriendsFromPath(NSString *path) {
     }
     [NSLayoutConstraint activateConstraints:cs];
     return cell;
+  } @catch (NSException *ex) {
+    ZUSLog(@"kho tin: NGOẠI LỆ dựng thẻ: %@ — %@", ex.name, ex.reason);
+    UITableViewCell *plain = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
+    plain.backgroundColor = [UIColor clearColor];
+    plain.textLabel.textColor = [UIColor whiteColor];
+    plain.textLabel.numberOfLines = 0;
+    plain.textLabel.text = [e[@"text"] length] ? e[@"text"] : @"(tin media)";
+    return plain;
+  }
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
@@ -2476,7 +2496,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.3.6";
+    prof[@"_version"] = @"1.3.7";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -2711,8 +2731,15 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
     ]];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(zu_refresh) name:@"ZUSLicenseChanged" object:nil];
     [self zus_updateLicenseVeil];
-    [self zu_rebuild];
-    [self zu_applyTheme];
+    // 1.3.7 chẩn đoán văng khi mở bảng (1.3.6): đánh dấu từng bước + bắt
+    // ngoại lệ ghi log, để nếu còn văng thì log chỉ đích danh bước/lỗi.
+    ZUSLog(@"bảng ZUS: bước 1/3 — dựng mô hình (zu_rebuild)");
+    @try { [self zu_rebuild]; }
+    @catch (NSException *ex) { ZUSLog(@"bảng ZUS: NGOẠI LỆ ở zu_rebuild: %@ — %@", ex.name, ex.reason); }
+    ZUSLog(@"bảng ZUS: bước 2/3 — áp giao diện (zu_applyTheme)");
+    @try { [self zu_applyTheme]; }
+    @catch (NSException *ex) { ZUSLog(@"bảng ZUS: NGOẠI LỆ ở zu_applyTheme: %@ — %@", ex.name, ex.reason); }
+    ZUSLog(@"bảng ZUS: bước 3/3 — viewDidLoad hoàn tất, chờ dựng ô");
 }
 
 - (void)zu_done {
@@ -2721,10 +2748,14 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
 
 - (void)zu_tabTap:(UIButton *)sender {
     self.zusTab = sender.tag;
-    [self zu_rebuild];
-    [self zu_applyTheme];
-    [self.zusTV reloadData];
-    if (self.zusTV.numberOfSections > 0) [self.zusTV scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0] atScrollPosition:UITableViewScrollPositionTop animated:NO];
+    @try {
+        [self zu_rebuild];
+        [self zu_applyTheme];
+        [self.zusTV reloadData];
+        if (self.zusTV.numberOfSections > 0) [self.zusTV scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0] atScrollPosition:UITableViewScrollPositionTop animated:NO];
+    } @catch (NSException *ex) {
+        ZUSLog(@"bảng ZUS: NGOẠI LỆ khi chuyển tab %ld: %@ — %@", (long)sender.tag, ex.name, ex.reason);
+    }
 }
 
 - (void)zu_applyTheme {
@@ -2893,7 +2924,7 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         [secs addObject:@{@"header": @"Trạng thái", @"rows": @[
             @{@"kind": @"action", @"title": @"Xem trạng thái dò", @"act": @"diag", @"icon": @"eye"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.3.6 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.3.7 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -2914,10 +2945,15 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    NSString *kind = [self zu_rowAt:indexPath][@"kind"];
-    if ([kind isEqualToString:@"hero"]) return 236;
-    if ([kind isEqualToString:@"stats"]) return 112;
-    if ([kind isEqualToString:@"journal"]) return 66;
+    @try {
+        NSString *kind = [self zu_rowAt:indexPath][@"kind"];
+        if ([kind isEqualToString:@"hero"]) return 236;
+        if ([kind isEqualToString:@"stats"]) return 112;
+        if ([kind isEqualToString:@"journal"]) return 66;
+    } @catch (NSException *ex) {
+        static int sHLog = 0;
+        if (sHLog < 5) { sHLog++; ZUSLog(@"bảng ZUS: NGOẠI LỆ ở heightForRow: %@ — %@", ex.name, ex.reason); }
+    }
     return UITableViewAutomaticDimension;
 }
 
@@ -2928,6 +2964,8 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     NSDictionary *row = [self zu_rowAt:indexPath];
     NSString *kind = row[@"kind"];
+    { static int sCellLog = 0;
+      if (sCellLog < 3) { sCellLog++; ZUSLog(@"bảng ZUS: dựng ô %d kind=%@", sCellLog, kind); } }
     NSDictionary *t = self.zusTheme;
     UITableViewCellStyle style = ([kind isEqualToString:@"info2"] || [kind isEqualToString:@"time"]) ? UITableViewCellStyleSubtitle : UITableViewCellStyleDefault;
     UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:style reuseIdentifier:nil];
@@ -2937,6 +2975,7 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
     cell.textLabel.numberOfLines = 0;
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
     if ([kind isEqualToString:@"hero"]) {
+        @try {
         cell.backgroundColor = [UIColor clearColor];
         UIStackView *st = [[UIStackView alloc] initWithFrame:CGRectZero];
         st.axis = UILayoutConstraintAxisVertical;
@@ -2984,8 +3023,12 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
             [pl.trailingAnchor constraintEqualToAnchor:pill.trailingAnchor constant:-14],
         ]];
         return cell;
+        } @catch (NSException *ex) {
+            ZUSLog(@"bảng ZUS: NGOẠI LỆ dựng ô hero: %@ — %@", ex.name, ex.reason);
+        }
     }
     if ([kind isEqualToString:@"stats"]) {
+        @try {
         NSArray *cols = @[
             @[@"eye", @"Đã xem", @(gBlockedRead)],
             @[@"typing", @"Đang nhập", @(gBlockedTyping)],
@@ -3030,8 +3073,12 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
             [st.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-12],
         ]];
         return cell;
+        } @catch (NSException *ex) {
+            ZUSLog(@"bảng ZUS: NGOẠI LỆ dựng ô stats: %@ — %@", ex.name, ex.reason);
+        }
     }
     if ([kind isEqualToString:@"journal"]) {
+        @try {
         cell.textLabel.text = nil;
         NSString *ttl = row[@"title"];
         UIStackView *st = [[UIStackView alloc] initWithFrame:CGRectZero];
@@ -3095,6 +3142,9 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
             [bl.trailingAnchor constraintEqualToAnchor:pill.trailingAnchor constant:-11],
         ]];
         return cell;
+        } @catch (NSException *ex) {
+            ZUSLog(@"bảng ZUS: NGOẠI LỆ dựng ô journal: %@ — %@", ex.name, ex.reason);
+        }
     }
     if (row[@"icon"]) {
         UIImage *im = ZUSAssetImage(row[@"icon"]);
@@ -5689,7 +5739,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.3.6 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.3.7 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
