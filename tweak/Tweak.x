@@ -1,4 +1,4 @@
-// ZUS 1.3.5 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.3.6 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
 //
 // 1.3.4 — SỬA 3 LỖI ANH CHỐT NGÀY 2026-11-27:
 // (1) "Đang gửi": cửa chung InboxDataManager.processUpdateStatus…withNewStatus:
@@ -20,6 +20,11 @@
 //     ảnh gốc / emoji / dò cuộc gọi / dò undo / dò kho / quảng cáo / link) khi
 //     tính năng tương ứng đang bật — bật giữa chừng thì lắp lúc đổi cài đặt.
 //     Lõi 45 cửa giữ nguyên byte-identical.
+//
+// 1.3.6 — SỬA LỖI BUILD CỦA 1.3.5: bản 1.3.5 chết khi biên dịch vì em thêm
+// TRÙNG cặp willDisplayHeader/FooterView (bảng ZUS vốn đã có sẵn một cặp từ
+// trước). 1.3.6 chỉ xoá cặp trùng của em, giữ nguyên cặp gốc; còn lại giữ
+// nguyên 1.3.5.
 //
 // 1.3.5 — GIAO DIỆN CINEMATIC + KHO THẺ KÍNH + SỬA XÁC NHẬN GỌI (anh chốt
 // 2026-11-27). Toàn bộ fix của 1.3.4 giữ NGUYÊN VĂN (đã đối chiếu diff:
@@ -2471,7 +2476,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.3.5";
+    prof[@"_version"] = @"1.3.6";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -2888,7 +2893,7 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         [secs addObject:@{@"header": @"Trạng thái", @"rows": @[
             @{@"kind": @"action", @"title": @"Xem trạng thái dò", @"act": @"diag", @"icon": @"eye"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.3.5 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.3.6 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -2914,16 +2919,6 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
     if ([kind isEqualToString:@"stats"]) return 112;
     if ([kind isEqualToString:@"journal"]) return 66;
     return UITableViewAutomaticDimension;
-}
-
-- (void)tableView:(UITableView *)tableView willDisplayHeaderView:(UIView *)view forSection:(NSInteger)section {
-    if ([view isKindOfClass:[UITableViewHeaderFooterView class]])
-        ((UITableViewHeaderFooterView *)view).textLabel.textColor = [self.zusTheme[@"text"] colorWithAlphaComponent:0.85];
-}
-
-- (void)tableView:(UITableView *)tableView willDisplayFooterView:(UIView *)view forSection:(NSInteger)section {
-    if ([view isKindOfClass:[UITableViewHeaderFooterView class]])
-        ((UITableViewHeaderFooterView *)view).textLabel.textColor = [self.zusTheme[@"text"] colorWithAlphaComponent:0.5];
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
@@ -5694,7 +5689,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.3.5 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.3.6 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
