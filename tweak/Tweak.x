@@ -1,4 +1,17 @@
-// ZUS 1.4.8 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.4.9 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+//
+// 1.4.9 — 24 BỘ MÀU CON GIÁP + CUNG HOÀNG ĐẠO (anh chốt
+// 2026-11-28, giữ nguyên bộ code chuẩn 1.4.8 — chỉ đụng vùng
+// theme/bảng): mục Bộ màu thêm 12 bộ con giáp (preset 4–15) và
+// 12 bộ cung hoàng đạo (preset 16–27), mỗi bộ một bảng 4 màu
+// riêng + một biểu tượng riêng không bộ nào trùng bộ nào (chữ
+// Hán của con giáp / ký hiệu chiêm tinh của cung, đúng minh hoạ
+// anh duyệt). Hai nhóm GẬP mặc định, chạm dòng nhóm mới xổ
+// xuống; dòng nhóm hiện bộ đang chọn của nhóm. Mỗi bộ có NỀN
+// riêng vẽ lúc chạy (không thêm asset nào): con giáp = chữ
+// biểu tượng mờ khổ lớn sau các thẻ, cung hoàng đạo = đúng
+// hình nối sao của chòm sao đó theo các sao chính. 4 bộ cơ
+// bản giữ nguyên chấm màu như bản chuẩn.
 //
 // 1.4.8 — GÓI SỬA GIAO DIỆN + CHẨN ĐOÁN THEME (anh chốt 2026-11-28,
 // giữ nguyên bộ code chuẩn 1.4.7): (1) THANH TRẠNG THÁI THEO THEME
@@ -2919,7 +2932,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.4.8";
+    prof[@"_version"] = @"1.4.9";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -2978,6 +2991,70 @@ static UIColor *ZUSBlendColor(UIColor *a, UIColor *b, CGFloat frac) {
     return [UIColor colorWithRed:r1 + (r2 - r1) * frac green:g1 + (g2 - g1) * frac blue:b1 + (b2 - b1) * frac alpha:1.0];
 }
 
+
+// 1.4.9: dữ liệu 24 bộ màu theo con giáp (preset 4–15) và cung hoàng
+// đạo (preset 16–27) — đúng bản minh hoạ anh duyệt 2026-11-28: mỗi
+// bộ một bộ 4 màu riêng (nền/thanh/chữ/nhấn) và một biểu tượng
+// riêng, không bộ nào trùng bộ nào. Bộ TỐI dùng thẻ kính mờ
+// (surface = trắng alpha 0.08 như Cinematic), bộ SÁNG dùng thẻ
+// trắng (như bộ Sáng). Con giáp theo bản Việt Nam (Mão = Mèo,
+// Mùi = Dê); cung hoàng đạo kèm khoảng ngày phổ thông.
+static NSDictionary *ZUSZodiacInfo(int preset) {
+    static NSArray *infos = nil;
+    if (!infos) infos = @[
+        @{@"name": @"Tý — Chuột", @"sym": @"鼠", @"bg": @"#1E2640", @"bar": @"#2C3658", @"text": @"#FFFFFF", @"accent": @"#A0B4DC", @"light": @NO},
+        @{@"name": @"Sửu — Trâu", @"sym": @"牛", @"bg": @"#3E2C1E", @"bar": @"#543E2A", @"text": @"#FFFFFF", @"accent": @"#E8C996", @"light": @NO},
+        @{@"name": @"Dần — Hổ", @"sym": @"虎", @"bg": @"#121010", @"bar": @"#221E1A", @"text": @"#FFFFFF", @"accent": @"#F08228", @"light": @NO},
+        @{@"name": @"Mão — Mèo", @"sym": @"貓", @"bg": @"#FAE4EC", @"bar": @"#FCF0F5", @"text": @"#4A2C34", @"accent": @"#E66E96", @"light": @YES},
+        @{@"name": @"Thìn — Rồng", @"sym": @"龍", @"bg": @"#601014", @"bar": @"#801A1E", @"text": @"#FFFFFF", @"accent": @"#F5C542", @"light": @NO},
+        @{@"name": @"Tỵ — Rắn", @"sym": @"蛇", @"bg": @"#0A3A2C", @"bar": @"#10543E", @"text": @"#FFFFFF", @"accent": @"#8CE6BE", @"light": @NO},
+        @{@"name": @"Ngọ — Ngựa", @"sym": @"馬", @"bg": @"#4A1220", @"bar": @"#661C2E", @"text": @"#FFFFFF", @"accent": @"#FFB054", @"light": @NO},
+        @{@"name": @"Mùi — Dê", @"sym": @"羊", @"bg": @"#E0F6EE", @"bar": @"#F0FCF7", @"text": @"#143C30", @"accent": @"#1EAA8C", @"light": @YES},
+        @{@"name": @"Thân — Khỉ", @"sym": @"猴", @"bg": @"#4A3414", @"bar": @"#66481E", @"text": @"#FFFFFF", @"accent": @"#FAD650", @"light": @NO},
+        @{@"name": @"Dậu — Gà", @"sym": @"雞", @"bg": @"#2E1C40", @"bar": @"#422A5A", @"text": @"#FFFFFF", @"accent": @"#FF9650", @"light": @NO},
+        @{@"name": @"Tuất — Chó", @"sym": @"狗", @"bg": @"#2C3620", @"bar": @"#3E4C2E", @"text": @"#FFFFFF", @"accent": @"#ECDCB4", @"light": @NO},
+        @{@"name": @"Hợi — Heo", @"sym": @"豬", @"bg": @"#FDE8E0", @"bar": @"#FEF4F0", @"text": @"#603428", @"accent": @"#FA8278", @"light": @YES},
+        @{@"name": @"Bạch Dương", @"sym": @"♈", @"sub": @"21/3 – 19/4", @"bg": @"#461410", @"bar": @"#601E18", @"text": @"#FFFFFF", @"accent": @"#FF543C", @"light": @NO},
+        @{@"name": @"Kim Ngưu", @"sym": @"♉", @"sub": @"20/4 – 20/5", @"bg": @"#183624", @"bar": @"#224C32", @"text": @"#FFFFFF", @"accent": @"#82D282", @"light": @NO},
+        @{@"name": @"Song Tử", @"sym": @"♊", @"sub": @"21/5 – 20/6", @"bg": @"#54400A", @"bar": @"#705812", @"text": @"#FFFFFF", @"accent": @"#FFD640", @"light": @NO},
+        @{@"name": @"Cự Giải", @"sym": @"♋", @"sub": @"21/6 – 22/7", @"bg": @"#102C4A", @"bar": @"#183E66", @"text": @"#FFFFFF", @"accent": @"#BECDE6", @"light": @NO},
+        @{@"name": @"Sư Tử", @"sym": @"♌", @"sub": @"23/7 – 22/8", @"bg": @"#402808", @"bar": @"#5A3A0E", @"text": @"#FFFFFF", @"accent": @"#FFB428", @"light": @NO},
+        @{@"name": @"Xử Nữ", @"sym": @"♍", @"sub": @"23/8 – 22/9", @"bg": @"#34381E", @"bar": @"#484E2C", @"text": @"#FFFFFF", @"accent": @"#B4C88C", @"light": @NO},
+        @{@"name": @"Thiên Bình", @"sym": @"♎", @"sub": @"23/9 – 22/10", @"bg": @"#FAE6F0", @"bar": @"#FDF4F9", @"text": @"#502846", @"accent": @"#F082B4", @"light": @YES},
+        @{@"name": @"Thiên Yết", @"sym": @"♏", @"sub": @"23/10 – 21/11", @"bg": @"#280A1A", @"bar": @"#3C1028", @"text": @"#FFFFFF", @"accent": @"#E63C6E", @"light": @NO},
+        @{@"name": @"Nhân Mã", @"sym": @"♐", @"sub": @"22/11 – 21/12", @"bg": @"#2C1A54", @"bar": @"#3E2672", @"text": @"#FFFFFF", @"accent": @"#AA82FF", @"light": @NO},
+        @{@"name": @"Ma Kết", @"sym": @"♑", @"sub": @"22/12 – 19/1", @"bg": @"#2C2E32", @"bar": @"#3E4046", @"text": @"#FFFFFF", @"accent": @"#A0AFC3", @"light": @NO},
+        @{@"name": @"Bảo Bình", @"sym": @"♒", @"sub": @"20/1 – 18/2", @"bg": @"#083440", @"bar": @"#0C4A5A", @"text": @"#FFFFFF", @"accent": @"#3CDCFF", @"light": @NO},
+        @{@"name": @"Song Ngư", @"sym": @"♓", @"sub": @"19/2 – 20/3", @"bg": @"#1E1E4A", @"bar": @"#2C2C66", @"text": @"#FFFFFF", @"accent": @"#B4A0FF", @"light": @NO},
+    ];
+    int i = preset - 4;
+    return (i >= 0 && i < (int)infos.count) ? infos[(NSUInteger)i] : nil;
+}
+
+// 1.4.9: hình nối sao (stick figure) của 12 chòm sao hoàng đạo —
+// vẽ theo các sao chính, đúng hình chòm thật (toạ độ chuẩn hoá
+// 0..1, y hướng xuống theo màn hình). "big" = sao sáng của chòm.
+static NSDictionary *ZUSConstellation(int preset) {
+    static NSDictionary *all = nil;
+    if (!all) {
+        all = @{
+            @16: @{@"pts": @[[NSValue valueWithCGPoint:CGPointMake(0.280, 0.400)], [NSValue valueWithCGPoint:CGPointMake(0.440, 0.330)], [NSValue valueWithCGPoint:CGPointMake(0.630, 0.420)], [NSValue valueWithCGPoint:CGPointMake(0.740, 0.330)]], @"lines": @[@[@0, @1], @[@1, @2], @[@2, @3]], @"big": @[@2]},
+            @17: @{@"pts": @[[NSValue valueWithCGPoint:CGPointMake(0.580, 0.580)], [NSValue valueWithCGPoint:CGPointMake(0.480, 0.480)], [NSValue valueWithCGPoint:CGPointMake(0.400, 0.390)], [NSValue valueWithCGPoint:CGPointMake(0.300, 0.200)], [NSValue valueWithCGPoint:CGPointMake(0.640, 0.420)], [NSValue valueWithCGPoint:CGPointMake(0.740, 0.300)]], @"lines": @[@[@0, @1], @[@1, @2], @[@2, @3], @[@0, @4], @[@4, @5]], @"big": @[@0]},
+            @18: @{@"pts": @[[NSValue valueWithCGPoint:CGPointMake(0.360, 0.140)], [NSValue valueWithCGPoint:CGPointMake(0.345, 0.260)], [NSValue valueWithCGPoint:CGPointMake(0.330, 0.380)], [NSValue valueWithCGPoint:CGPointMake(0.320, 0.500)], [NSValue valueWithCGPoint:CGPointMake(0.315, 0.620)], [NSValue valueWithCGPoint:CGPointMake(0.550, 0.170)], [NSValue valueWithCGPoint:CGPointMake(0.535, 0.290)], [NSValue valueWithCGPoint:CGPointMake(0.525, 0.410)], [NSValue valueWithCGPoint:CGPointMake(0.515, 0.530)], [NSValue valueWithCGPoint:CGPointMake(0.505, 0.650)]], @"lines": @[@[@0, @1], @[@1, @2], @[@2, @3], @[@3, @4], @[@5, @6], @[@6, @7], @[@7, @8], @[@8, @9], @[@0, @5]], @"big": @[@0, @5]},
+            @19: @{@"pts": @[[NSValue valueWithCGPoint:CGPointMake(0.500, 0.220)], [NSValue valueWithCGPoint:CGPointMake(0.520, 0.400)], [NSValue valueWithCGPoint:CGPointMake(0.350, 0.640)], [NSValue valueWithCGPoint:CGPointMake(0.580, 0.500)], [NSValue valueWithCGPoint:CGPointMake(0.630, 0.600)]], @"lines": @[@[@0, @1], @[@1, @2], @[@1, @3], @[@3, @4]], @"big": @[@1]},
+            @20: @{@"pts": @[[NSValue valueWithCGPoint:CGPointMake(0.280, 0.600)], [NSValue valueWithCGPoint:CGPointMake(0.315, 0.470)], [NSValue valueWithCGPoint:CGPointMake(0.360, 0.330)], [NSValue valueWithCGPoint:CGPointMake(0.420, 0.250)], [NSValue valueWithCGPoint:CGPointMake(0.490, 0.190)], [NSValue valueWithCGPoint:CGPointMake(0.570, 0.150)], [NSValue valueWithCGPoint:CGPointMake(0.560, 0.460)], [NSValue valueWithCGPoint:CGPointMake(0.740, 0.560)]], @"lines": @[@[@0, @1], @[@1, @2], @[@2, @3], @[@3, @4], @[@4, @5], @[@0, @6], @[@6, @7]], @"big": @[@0]},
+            @21: @{@"pts": @[[NSValue valueWithCGPoint:CGPointMake(0.660, 0.160)], [NSValue valueWithCGPoint:CGPointMake(0.550, 0.260)], [NSValue valueWithCGPoint:CGPointMake(0.490, 0.380)], [NSValue valueWithCGPoint:CGPointMake(0.420, 0.500)], [NSValue valueWithCGPoint:CGPointMake(0.280, 0.720)], [NSValue valueWithCGPoint:CGPointMake(0.520, 0.560)], [NSValue valueWithCGPoint:CGPointMake(0.600, 0.660)]], @"lines": @[@[@0, @1], @[@1, @2], @[@2, @3], @[@3, @4], @[@3, @5], @[@5, @6]], @"big": @[@4]},
+            @22: @{@"pts": @[[NSValue valueWithCGPoint:CGPointMake(0.500, 0.180)], [NSValue valueWithCGPoint:CGPointMake(0.280, 0.480)], [NSValue valueWithCGPoint:CGPointMake(0.720, 0.480)], [NSValue valueWithCGPoint:CGPointMake(0.500, 0.400)]], @"lines": @[@[@1, @3], @[@3, @2], @[@3, @0]], @"big": @[@0]},
+            @23: @{@"pts": @[[NSValue valueWithCGPoint:CGPointMake(0.200, 0.160)], [NSValue valueWithCGPoint:CGPointMake(0.155, 0.235)], [NSValue valueWithCGPoint:CGPointMake(0.185, 0.315)], [NSValue valueWithCGPoint:CGPointMake(0.260, 0.400)], [NSValue valueWithCGPoint:CGPointMake(0.335, 0.475)], [NSValue valueWithCGPoint:CGPointMake(0.400, 0.575)], [NSValue valueWithCGPoint:CGPointMake(0.465, 0.665)], [NSValue valueWithCGPoint:CGPointMake(0.535, 0.735)], [NSValue valueWithCGPoint:CGPointMake(0.615, 0.755)], [NSValue valueWithCGPoint:CGPointMake(0.685, 0.705)], [NSValue valueWithCGPoint:CGPointMake(0.725, 0.625)], [NSValue valueWithCGPoint:CGPointMake(0.735, 0.545)]], @"lines": @[@[@0, @1], @[@1, @2], @[@2, @3], @[@3, @4], @[@4, @5], @[@5, @6], @[@6, @7], @[@7, @8], @[@8, @9], @[@9, @10], @[@10, @11]], @"big": @[@4]},
+            @24: @{@"pts": @[[NSValue valueWithCGPoint:CGPointMake(0.360, 0.500)], [NSValue valueWithCGPoint:CGPointMake(0.500, 0.420)], [NSValue valueWithCGPoint:CGPointMake(0.570, 0.530)], [NSValue valueWithCGPoint:CGPointMake(0.450, 0.630)], [NSValue valueWithCGPoint:CGPointMake(0.240, 0.400)], [NSValue valueWithCGPoint:CGPointMake(0.680, 0.460)], [NSValue valueWithCGPoint:CGPointMake(0.490, 0.300)]], @"lines": @[@[@0, @1], @[@1, @2], @[@2, @3], @[@3, @0], @[@0, @4], @[@2, @5], @[@1, @6]], @"big": @[@1]},
+            @25: @{@"pts": @[[NSValue valueWithCGPoint:CGPointMake(0.240, 0.260)], [NSValue valueWithCGPoint:CGPointMake(0.360, 0.360)], [NSValue valueWithCGPoint:CGPointMake(0.480, 0.470)], [NSValue valueWithCGPoint:CGPointMake(0.620, 0.400)], [NSValue valueWithCGPoint:CGPointMake(0.760, 0.300)], [NSValue valueWithCGPoint:CGPointMake(0.700, 0.470)]], @"lines": @[@[@0, @1], @[@1, @2], @[@2, @3], @[@3, @4], @[@3, @5]], @"big": @[@4]},
+            @26: @{@"pts": @[[NSValue valueWithCGPoint:CGPointMake(0.280, 0.220)], [NSValue valueWithCGPoint:CGPointMake(0.440, 0.270)], [NSValue valueWithCGPoint:CGPointMake(0.550, 0.210)], [NSValue valueWithCGPoint:CGPointMake(0.600, 0.360)], [NSValue valueWithCGPoint:CGPointMake(0.560, 0.460)], [NSValue valueWithCGPoint:CGPointMake(0.650, 0.540)], [NSValue valueWithCGPoint:CGPointMake(0.580, 0.630)], [NSValue valueWithCGPoint:CGPointMake(0.670, 0.720)]], @"lines": @[@[@0, @1], @[@1, @2], @[@2, @3], @[@3, @4], @[@4, @5], @[@5, @6], @[@6, @7]], @"big": @[@1]},
+            @27: @{@"pts": @[[NSValue valueWithCGPoint:CGPointMake(0.320, 0.740)], [NSValue valueWithCGPoint:CGPointMake(0.290, 0.600)], [NSValue valueWithCGPoint:CGPointMake(0.260, 0.460)], [NSValue valueWithCGPoint:CGPointMake(0.235, 0.330)], [NSValue valueWithCGPoint:CGPointMake(0.230, 0.240)], [NSValue valueWithCGPoint:CGPointMake(0.440, 0.660)], [NSValue valueWithCGPoint:CGPointMake(0.560, 0.560)], [NSValue valueWithCGPoint:CGPointMake(0.660, 0.440)], [NSValue valueWithCGPoint:CGPointMake(0.720, 0.320)], [NSValue valueWithCGPoint:CGPointMake(0.740, 0.250)]], @"lines": @[@[@0, @1], @[@1, @2], @[@2, @3], @[@3, @4], @[@0, @5], @[@5, @6], @[@6, @7], @[@7, @8], @[@8, @9]], @"big": @[@0]},
+        };
+    }
+    return all[@(preset)];
+}
+
 // 1.1.7 viết lại theo ảnh mẫu ZaloZen của anh: nền trang và nền ô tách
 // riêng, màu mạnh (xanh) CHỈ là điểm nhấn — tab đang chọn, công tắc, dấu
 // tích, thanh tiêu đề — không còn nhuộm đặc cả bảng như 1.1.5/1.1.6.
@@ -2993,6 +3070,17 @@ static NSDictionary *ZUSTheme(void) {
         UIColor *barText = (0.299 * r + 0.587 * g + 0.114 * b) > 0.6 ? [UIColor blackColor] : [UIColor whiteColor];
         UIColor *surface = ZUSBlendColor(bar, bg, 0.88);
         return @{@"bg": bg, @"bar": bar, @"surface": surface, @"text": text, @"accent": accent, @"barText": barText, @"preset": @3};
+    }
+    if (preset >= 4 && preset <= 27) {
+        // 1.4.9: 24 bộ con giáp (4–15) + cung hoàng đạo (16–27).
+        NSDictionary *zi = ZUSZodiacInfo(preset);
+        UIColor *zbg = ZUSColorFromHex(zi[@"bg"], [UIColor blackColor]);
+        UIColor *zbar = ZUSColorFromHex(zi[@"bar"], zbg);
+        UIColor *ztext = ZUSColorFromHex(zi[@"text"], [UIColor whiteColor]);
+        UIColor *zacc = ZUSColorFromHex(zi[@"accent"], [UIColor systemBlueColor]);
+        BOOL zlight = [zi[@"light"] boolValue];
+        UIColor *zsurface = zlight ? [UIColor whiteColor] : [UIColor colorWithWhite:1.0 alpha:0.08];
+        return @{@"bg": zbg, @"bar": zbar, @"surface": zsurface, @"text": ztext, @"accent": zacc, @"barText": zlight ? ztext : [UIColor whiteColor], @"preset": @(preset)};
     }
     if (preset == 1) return @{@"bg": [UIColor colorWithRed:0.95 green:0.95 blue:0.97 alpha:1.0], @"bar": [UIColor whiteColor], @"surface": [UIColor whiteColor], @"text": [UIColor blackColor], @"accent": [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0], @"barText": [UIColor blackColor], @"preset": @1};
     if (preset == 2) return @{@"bg": [UIColor colorWithRed:0.95 green:0.95 blue:0.97 alpha:1.0], @"bar": [UIColor colorWithRed:0.0 green:0.41 blue:1.0 alpha:1.0], @"surface": [UIColor whiteColor], @"text": [UIColor blackColor], @"accent": [UIColor colorWithRed:0.0 green:0.41 blue:1.0 alpha:1.0], @"barText": [UIColor whiteColor], @"preset": @2};
@@ -3054,9 +3142,81 @@ static UIImage *ZUSButtonImage(void) {
 
 static void ZUSSaveAvatarCover(UIViewController *fromVC);
 
+
+// 1.4.9: nền riêng của từng bộ con giáp/cung hoàng đạo, vẽ lúc chạy
+// (không thêm asset nào vào ZUSAssets.h): sao điểm nền theo hạt
+// giống cố định của bộ; con giáp vẽ chữ biểu tượng mờ khổ lớn sau
+// các thẻ, cung hoàng đạo vẽ đúng hình nối sao của chòm sao đó.
+@interface ZUSZodiacBgView : UIView
+@property (nonatomic, strong) UIColor *zusAccent;
+@property (nonatomic) BOOL zusLight;
+@property (nonatomic) int zusPreset;
+@end
+
+@implementation ZUSZodiacBgView
+- (void)drawRect:(CGRect)rect {
+    [super drawRect:rect];
+    NSDictionary *info = ZUSZodiacInfo(self.zusPreset);
+    if (!info) return;
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+    CGFloat W = rect.size.width, H = rect.size.height;
+    UIColor *acc = self.zusAccent ?: [UIColor whiteColor];
+    // Sao điểm nền — hạt giống cố định theo bộ, mở lần nào cũng vậy.
+    unsigned seed = (unsigned)(self.zusPreset * 7919 + 13);
+    for (int i = 0; i < 90; i++) {
+        seed = seed * 1103515245u + 12345u;
+        CGFloat x = ((seed >> 16) % 1000) / 1000.0 * W;
+        seed = seed * 1103515245u + 12345u;
+        CGFloat y = ((seed >> 16) % 1000) / 1000.0 * H;
+        seed = seed * 1103515245u + 12345u;
+        CGFloat a = 0.10 + (((seed >> 16) % 100) / 100.0) * (self.zusLight ? 0.25 : 0.45);
+        CGFloat r = (CGFloat)((seed >> 16) % 2) + 1.0;
+        [[acc colorWithAlphaComponent:a] setFill];
+        CGContextFillEllipseInRect(ctx, CGRectMake(x - r, y - r, r * 2, r * 2));
+    }
+    if (self.zusPreset <= 15) {
+        // Con giáp: chữ biểu tượng mờ khổ lớn (như minh hoạ Mùi).
+        NSString *sym = info[@"sym"];
+        UIFont *f = [UIFont systemFontOfSize:W * 0.92];
+        NSDictionary *at = @{NSFontAttributeName: f, NSForegroundColorAttributeName: [acc colorWithAlphaComponent:self.zusLight ? 0.13 : 0.10]};
+        CGSize sz = [sym sizeWithAttributes:at];
+        [sym drawAtPoint:CGPointMake((W - sz.width) / 2, H * 0.14) withAttributes:at];
+    } else {
+        // Cung hoàng đạo: hình nối sao của chòm (như minh hoạ Song Tử).
+        NSDictionary *con = ZUSConstellation(self.zusPreset);
+        if (!con) return;
+        NSArray *pts = con[@"pts"];
+        NSArray *lns = con[@"lines"];
+        NSArray *big = con[@"big"];
+        CGFloat S = W * 0.94, ox = (W - S) / 2, oy = H * 0.09;
+        CGContextSetLineWidth(ctx, 1.5);
+        [[acc colorWithAlphaComponent:0.45] setStroke];
+        for (NSArray *ln in lns) {
+            CGPoint p1 = [pts[(NSUInteger)[ln[0] intValue]] CGPointValue];
+            CGPoint p2 = [pts[(NSUInteger)[ln[1] intValue]] CGPointValue];
+            CGContextMoveToPoint(ctx, ox + p1.x * S, oy + p1.y * S);
+            CGContextAddLineToPoint(ctx, ox + p2.x * S, oy + p2.y * S);
+            CGContextStrokePath(ctx);
+        }
+        for (NSUInteger i = 0; i < pts.count; i++) {
+            CGPoint p = [pts[i] CGPointValue];
+            CGFloat cx = ox + p.x * S, cy = oy + p.y * S;
+            CGFloat r = [big containsObject:@(i)] ? 4.0 : 2.4;
+            [[acc colorWithAlphaComponent:0.22] setFill];
+            CGContextFillEllipseInRect(ctx, CGRectMake(cx - r * 3, cy - r * 3, r * 6, r * 6));
+            [[UIColor colorWithWhite:1.0 alpha:0.92] setFill];
+            CGContextFillEllipseInRect(ctx, CGRectMake(cx - r, cy - r, r * 2, r * 2));
+        }
+    }
+}
+@end
+
 @interface ZUSSettingsController : UIViewController <UITableViewDataSource, UITableViewDelegate, UIColorPickerViewControllerDelegate>
 @property (nonatomic, strong) UITableView *zusTV;
 @property (nonatomic, strong) UIImageView *zusBgView;
+@property (nonatomic, strong) ZUSZodiacBgView *zusZodiacView;
+@property (nonatomic) BOOL zusGiapOpen;
+@property (nonatomic) BOOL zusCungOpen;
 @property (nonatomic, strong) UIView *zusTabBar;
 @property (nonatomic, strong) NSArray *zusTabBtns;
 @property (nonatomic) NSInteger zusTab;
@@ -3078,6 +3238,32 @@ static UIImage *ZUSSwatchImage(UIColor *c) {
     [p stroke];
     UIImage *im = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
+    return im;
+}
+
+// 1.4.9: icon riêng của từng bộ con giáp/cung hoàng đạo — vòng tròn
+// nhuộm nhạt theo màu nhấn + ký hiệu của bộ đó (đúng minh hoạ anh
+// duyệt; 24 bộ là 24 ký hiệu khác nhau, không bộ nào trùng bộ nào).
+static UIImage *ZUSZodiacIcon(int preset) {
+    static NSMutableDictionary *cache = nil;
+    if (!cache) cache = [NSMutableDictionary dictionary];
+    NSNumber *key = @(preset);
+    if (cache[key]) return cache[key];
+    NSDictionary *info = ZUSZodiacInfo(preset);
+    if (!info) return nil;
+    UIColor *acc = ZUSColorFromHex(info[@"accent"], [UIColor grayColor]);
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(30, 30), NO, 0);
+    UIBezierPath *p = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(1.5, 1.5, 27, 27)];
+    [ZUSBlendColor(acc, [UIColor whiteColor], 0.82) setFill];
+    [p fill];
+    NSString *sym = info[@"sym"];
+    NSDictionary *at = @{NSFontAttributeName: [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold],
+                         NSForegroundColorAttributeName: ZUSBlendColor(acc, [UIColor blackColor], 0.18)};
+    CGSize sz = [sym sizeWithAttributes:at];
+    [sym drawAtPoint:CGPointMake((30 - sz.width) / 2, (30 - sz.height) / 2) withAttributes:at];
+    UIImage *im = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    if (im) cache[key] = im;
     return im;
 }
 
@@ -3283,6 +3469,14 @@ static UIImage *ZUSOrbHeroImage(void) {
     bgv.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:bgv];
     self.zusBgView = bgv;
+    // 1.4.9: nền con giáp/cung hoàng đạo — nằm trên nền cinematic,
+    // dưới thanh tab + bảng; zu_applyTheme bật/tắt theo preset.
+    ZUSZodiacBgView *zv = [[ZUSZodiacBgView alloc] initWithFrame:CGRectZero];
+    zv.backgroundColor = [UIColor clearColor];
+    zv.userInteractionEnabled = NO;
+    zv.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:zv];
+    self.zusZodiacView = zv;
     // 1.3.5: thanh tab DƯỚI đáy theo mẫu cinematic đã duyệt: icon kính +
     // nhãn dưới, tab đang chọn sáng viền accent.
     UIView *bar = [[UIView alloc] initWithFrame:CGRectZero];
@@ -3365,6 +3559,10 @@ static UIImage *ZUSOrbHeroImage(void) {
         [bgv.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
         [bgv.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [bgv.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [zv.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [zv.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [zv.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [zv.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [bar.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
         [bar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [bar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -3408,6 +3606,16 @@ static UIImage *ZUSOrbHeroImage(void) {
     NSDictionary *t = self.zusTheme;
     BOOL cine = [t[@"preset"] intValue] == 0;
     self.zusBgView.hidden = !cine;
+    // 1.4.9: nền riêng của 24 bộ con giáp/cung hoàng đạo.
+    int zpreset = [t[@"preset"] intValue];
+    BOOL zod = (zpreset >= 4 && zpreset <= 27);
+    self.zusZodiacView.hidden = !zod;
+    if (zod) {
+        self.zusZodiacView.zusPreset = zpreset;
+        self.zusZodiacView.zusAccent = t[@"accent"];
+        self.zusZodiacView.zusLight = [ZUSZodiacInfo(zpreset)[@"light"] boolValue];
+        [self.zusZodiacView setNeedsDisplay];
+    }
     self.view.backgroundColor = cine ? [UIColor colorWithRed:0.02 green:0.03 blue:0.08 alpha:1.0] : t[@"bg"];
     self.zusTabBar.backgroundColor = cine ? [UIColor colorWithWhite:0.0 alpha:0.15] : t[@"bg"];
     [self.zusTabBar viewWithTag:43].hidden = !cine;
@@ -3617,12 +3825,36 @@ static UIImage *ZUSOrbHeroImage(void) {
         }
     } else {
         int preset = ZUSReadInt(ZUS_KEY_THEME, 0);
-        [secs addObject:@{@"header": @"Bộ màu", @"rows": @[
+        NSMutableArray *boRows = [NSMutableArray arrayWithArray:@[
             @{@"kind": @"radio", @"title": @"Tối", @"preset": @0},
             @{@"kind": @"radio", @"title": @"Sáng (trắng, chữ đen)", @"preset": @1},
             @{@"kind": @"radio", @"title": @"Xanh Zalo", @"preset": @2},
             @{@"kind": @"radio", @"title": @"Tự chọn", @"preset": @3},
-        ], @"mark": @(preset)}];
+        ]];
+        // 1.4.9: hai nhóm 12 bộ GẬP mặc định (anh chốt) — dòng nhóm
+        // hiện bộ đang chọn của nhóm đó; chạm dòng nhóm mới xổ các
+        // bộ xuống ngay trong mục.
+        NSDictionary *giapSel = (preset >= 4 && preset <= 15) ? ZUSZodiacInfo(preset) : nil;
+        [boRows addObject:@{@"kind": @"group", @"group": @"giap",
+            @"title": @"12 con giáp",
+            @"detail": giapSel ? [NSString stringWithFormat:@"Đang chọn: %@", giapSel[@"name"]] : @"12 bộ • chạm để mở",
+            @"iconpreset": giapSel ? @(preset) : @4}];
+        if (self.zusGiapOpen) for (int p = 4; p <= 15; p++) {
+            NSDictionary *inf = ZUSZodiacInfo(p);
+            [boRows addObject:@{@"kind": @"radio", @"title": inf[@"name"], @"preset": @(p)}];
+        }
+        NSDictionary *cungSel = (preset >= 16 && preset <= 27) ? ZUSZodiacInfo(preset) : nil;
+        [boRows addObject:@{@"kind": @"group", @"group": @"cung",
+            @"title": @"12 cung hoàng đạo",
+            @"detail": cungSel ? [NSString stringWithFormat:@"Đang chọn: %@", cungSel[@"name"]] : @"12 bộ • chạm để mở",
+            @"iconpreset": cungSel ? @(preset) : @16}];
+        if (self.zusCungOpen) for (int p = 16; p <= 27; p++) {
+            NSDictionary *inf = ZUSZodiacInfo(p);
+            NSMutableDictionary *r = [NSMutableDictionary dictionaryWithDictionary:@{@"kind": @"radio", @"title": inf[@"name"], @"preset": @(p)}];
+            if (inf[@"sub"]) r[@"detail"] = inf[@"sub"];
+            [boRows addObject:r];
+        }
+        [secs addObject:@{@"header": @"Bộ màu", @"rows": boRows, @"mark": @(preset)}];
         NSDictionary *t = ZUSTheme();
         [secs addObject:@{@"header": @"Tự chọn từng phần", @"footer": @"Chạm một phần để chọn màu — bảng tự chuyển sang bộ Tự chọn.", @"rows": @[
             @{@"kind": @"color", @"title": @"Nền", @"colkey": ZUS_KEY_COLBG, @"color": t[@"bg"]},
@@ -3656,7 +3888,7 @@ static UIImage *ZUSOrbHeroImage(void) {
             @{@"kind": @"action", @"title": @"Xem nhật ký", @"act": @"logview", @"icon": @"log"},
             @{@"kind": @"action", @"title": @"Báo cáo lỗi (.ips)", @"act": @"crashlist", @"icon": @"warn"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.8 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.9 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -3700,7 +3932,7 @@ static UIImage *ZUSOrbHeroImage(void) {
     { static int sCellLog = 0;
       if (sCellLog < 3) { sCellLog++; ZUSLog(@"bảng ZUS: dựng ô %d kind=%@", sCellLog, kind); } }
     NSDictionary *t = self.zusTheme;
-    UITableViewCellStyle style = ([kind isEqualToString:@"info2"] || [kind isEqualToString:@"time"]) ? UITableViewCellStyleSubtitle : UITableViewCellStyleDefault;
+    UITableViewCellStyle style = ([kind isEqualToString:@"info2"] || [kind isEqualToString:@"time"] || [kind isEqualToString:@"group"] || ([kind isEqualToString:@"radio"] && row[@"detail"])) ? UITableViewCellStyleSubtitle : UITableViewCellStyleDefault;
     UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:style reuseIdentifier:nil];
     cell.backgroundColor = t[@"surface"];
     cell.textLabel.text = row[@"title"];
@@ -3968,13 +4200,36 @@ static UIImage *ZUSOrbHeroImage(void) {
     } else if ([kind isEqualToString:@"radio"]) {
         // 1.3.9: chấm màu theo đúng màu nhấn của từng bộ màu.
         int pv = [row[@"preset"] intValue];
-        UIColor *swc = pv == 0 ? [UIColor colorWithRed:0.38 green:0.56 blue:1.0 alpha:1.0]
-                     : pv == 1 ? [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0]
-                     : pv == 2 ? [UIColor colorWithRed:0.0 green:0.41 blue:1.0 alpha:1.0]
-                     : ZUSColorFromHex(ZUSReadString(ZUS_KEY_COLACCENT), [UIColor systemBlueColor]);
-        cell.imageView.image = ZUSSwatchImage(swc);
+        if (pv >= 4) {
+            // 1.4.9: 24 bộ con giáp/cung hoàng đạo — mỗi bộ một biểu
+            // tượng riêng, không bộ nào trùng bộ nào.
+            cell.imageView.image = ZUSZodiacIcon(pv);
+        } else {
+            UIColor *swc = pv == 0 ? [UIColor colorWithRed:0.38 green:0.56 blue:1.0 alpha:1.0]
+                         : pv == 1 ? [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0]
+                         : pv == 2 ? [UIColor colorWithRed:0.0 green:0.41 blue:1.0 alpha:1.0]
+                         : ZUSColorFromHex(ZUSReadString(ZUS_KEY_COLACCENT), [UIColor systemBlueColor]);
+            cell.imageView.image = ZUSSwatchImage(swc);
+        }
+        cell.detailTextLabel.text = row[@"detail"];
+        cell.detailTextLabel.textColor = [t[@"text"] colorWithAlphaComponent:0.6];
         int cur = [self.zusSecs[(NSUInteger)indexPath.section][@"mark"] intValue];
         cell.accessoryType = ([row[@"preset"] intValue] == cur) ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
+        cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+    } else if ([kind isEqualToString:@"group"]) {
+        // 1.4.9: dòng nhóm xổ/xuống — icon của bộ đang chọn trong
+        // nhóm (chưa chọn thì lấy bộ đầu nhóm), dòng phụ hiện bộ
+        // đang chọn, mũi tên › khi đang gập / ⌄ khi đang mở.
+        cell.imageView.image = ZUSZodiacIcon([row[@"iconpreset"] intValue]);
+        cell.detailTextLabel.text = row[@"detail"];
+        cell.detailTextLabel.textColor = [t[@"text"] colorWithAlphaComponent:0.6];
+        BOOL open = [row[@"group"] isEqualToString:@"giap"] ? self.zusGiapOpen : self.zusCungOpen;
+        UILabel *chev = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 24, 24)];
+        chev.text = open ? @"⌄" : @"›";
+        chev.font = [UIFont systemFontOfSize:22 weight:UIFontWeightSemibold];
+        chev.textColor = [t[@"text"] colorWithAlphaComponent:0.4];
+        chev.textAlignment = NSTextAlignmentCenter;
+        cell.accessoryView = chev;
         cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     } else if ([kind isEqualToString:@"color"]) {
         UIView *swatch = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 26, 26)];
@@ -4085,6 +4340,15 @@ static UIImage *ZUSOrbHeroImage(void) {
             [self zu_refresh];
         };
         [self.navigationController pushViewController:tp animated:YES];
+    } else if ([kind isEqualToString:@"group"]) {
+        // 1.4.9: chạm dòng nhóm = xổ xuống / gập lại tại chỗ, không
+        // đổi bộ màu đang dùng.
+        BOOL open;
+        if ([row[@"group"] isEqualToString:@"giap"]) { self.zusGiapOpen = !self.zusGiapOpen; open = self.zusGiapOpen; }
+        else { self.zusCungOpen = !self.zusCungOpen; open = self.zusCungOpen; }
+        ZUSLog(@"theme: anh chạm dòng nhóm '%@' — nay %@ nhóm", row[@"title"], open ? @"XỔ" : @"GẬP");
+        [self zu_rebuild];
+        [self.zusTV reloadData];
     } else if ([kind isEqualToString:@"radio"]) {
         // 1.4.8: lần đầu vào bộ Tự chọn mà chưa từng lưu màu riêng thì
         // gieo cả 4 phần bằng màu bộ đang xem — vào Tự chọn không làm
@@ -6860,7 +7124,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.4.8 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.4.9 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
