@@ -1,4 +1,20 @@
-// ZUS 1.4.3 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.4.4 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+//
+// 1.4.4 — SỬA VỤ "ĐÃ NHẬN": THẢ CỬA seenTime (anh chốt 2026-11-27
+// sau khi bằng chứng chốt hạ ở vòng 1.4.3): cửa seenTime không chặn
+// bất kỳ lần gọi nào nữa — cho qua 100%, chỉ ghi bằng chứng (40 lần
+// đầu + mọi lần status>=3) y như cửa Inbox ở 1.4.2. Bằng chứng: mỗi
+// lần anh gửi tin, cửa này được gọi với status=3 và seenTime bằng
+// đúng mốc giờ của tin vừa gửi — đó là cập nhật ĐÃ NHẬN của tin anh
+// gửi, và quy tắc cũ (seenTime>0 thì chặn) đã nuốt hết nên máy anh
+// kẹt "Đã gửi" trong khi PC hiện "Đã nhận". Cửa này chỉ áp trạng
+// thái vào hồ sơ cục bộ trên máy anh, không báo cáo ra ngoài — các
+// cửa báo cáo phía tin đến (send…DeliveredMessages, sendSeen…,
+// addChatSeen…) và cửa giảm số chưa đọc giữ nguyên từng dòng, nên
+// bên kia vẫn không biết anh đã nhận/đã xem như trước. Kèm theo: gỡ
+// dàn ghi log "dò đường 3" của 1.4.3 (đã hết việc — các móc chung
+// trở lại nguyên dạng 1.4.2); bộ icon hết trùng của 1.4.3 giữ
+// nguyên; mọi phần còn lại giữ nguyên bộ 1.4.3/1.4.2.
 //
 // 1.4.3 — DÒ ĐƯỜNG THỨ BA + HẾT TRÙNG ICON (anh chốt gộp 2026-11-27,
 // dựng trên bộ 1.4.2 — giữ nguyên toàn bộ code đang chuẩn của 1.4.2,
@@ -1153,28 +1169,6 @@ static NSString *ZUSCatLabel(int cat) {
     }
 }
 
-// 1.4.3 — dò đường thứ ba: vụ "Đã nhận" của tin MÌNH GỬI không đi qua
-// hai cửa trạng thái chuyên dụng (log 1.4.2 chứng minh: các lần gửi sau
-// 21:13:50 chỉ thấy status=2 ở hai cửa đó, không status=3 nào tới dù PC
-// hiện Đã nhận). Vòng này ghi thêm các lần CHO QUA thuộc hai nhóm
-// đã-xem (1) và đã-nhận (3) ở mọi móc chung — lần chặn đã có dòng "ĐÃ
-// CHẶN" riêng — để đối chiếu quanh mốc anh gửi 1 tin kiểm chứng: cửa
-// nào thuộc hai nhóm này động đậy quanh lúc PC nhảy "Đã nhận" sẽ lộ
-// diện. Trần 400 dòng/phiên chống ngập log; ZUSLog tự gác khi tắt log
-// gỡ lỗi. CHỈ ghi log, không đổi bất kỳ quyết định chặn/cho qua nào.
-static int gZUSProbePass = 0;
-static BOOL gZUSProbeFull = NO;
-static void ZUSProbePass(__unsafe_unretained id self, SEL _cmd, int cat) {
-    if (cat != 1 && cat != 3) return;
-    if (gZUSProbePass < 400) {
-        gZUSProbePass++;
-        ZUSLog(@"dò đường 3 #%d [nhóm %@] %@.%@ -> cho qua", gZUSProbePass, ZUSCatLabel(cat), NSStringFromClass(object_getClass(self)), NSStringFromSelector(_cmd));
-    } else if (!gZUSProbeFull) {
-        gZUSProbeFull = YES;
-        ZUSLog(@"dò đường 3: đã đủ 400 dòng cho-qua — ngừng ghi tới hết phiên");
-    }
-}
-
 // Hàm thay thế chung cho các hàm tối đa 2 tham số: bật tính năng thì chặn
 // (không chạy gốc, trả 0), tắt thì chạy gốc và trả NGUYÊN giá trị gốc.
 // Từ 1.0.6 mọi hàm thay thế trả long long: hàm đích trả số nguyên/BOOL/con trỏ
@@ -1196,7 +1190,6 @@ static long long ZUSGenericHook(__unsafe_unretained id self, SEL _cmd, __unsafe_
     void *a2Raw = (__bridge void *)a2;
     BOOL active = (cat == 3) ? ZUSActiveDelivered(((uintptr_t)a2Raw & 0xFF) != 0) : ZUSActiveForCall(cat, self);
     if (active) { ZUSNoteBlocked(self, _cmd, cat); return 0; }
-    ZUSProbePass(self, _cmd, cat);
     if (orig) return ((long long (*)(__unsafe_unretained id, SEL, __unsafe_unretained id, __unsafe_unretained id))orig)(self, _cmd, a1, a2);
     return 0;
 }
@@ -1211,7 +1204,6 @@ static long long ZUSHook5(__unsafe_unretained id self, SEL _cmd, void *a1, void 
     ZUSNoteCalledOnce(self, _cmd, key);
     BOOL active = ZUSActiveForCall(cat, self);
     if (active) { ZUSNoteBlocked(self, _cmd, cat); return 0; }
-    ZUSProbePass(self, _cmd, cat);
     if (orig) return ((long long (*)(__unsafe_unretained id, SEL, void *, void *, void *, void *, void *))orig)(self, _cmd, a1, a2, a3, a4, a5);
     return 0;
 }
@@ -1223,7 +1215,6 @@ static long long ZUSHook3(__unsafe_unretained id self, SEL _cmd, void *a1, void 
     ZUSNoteCalledOnce(self, _cmd, key);
     BOOL active = (cat == 3) ? ZUSActiveDelivered(((uintptr_t)a2 & 0xFF) != 0) : ZUSActiveForCall(cat, self);
     if (active) { ZUSNoteBlocked(self, _cmd, cat); return 0; }
-    ZUSProbePass(self, _cmd, cat);
     if (orig) return ((long long (*)(__unsafe_unretained id, SEL, void *, void *, void *))orig)(self, _cmd, a1, a2, a3);
     return 0;
 }
@@ -1235,7 +1226,6 @@ static long long ZUSHook4(__unsafe_unretained id self, SEL _cmd, void *a1, void 
     ZUSNoteCalledOnce(self, _cmd, key);
     BOOL active = ZUSActiveForCall(cat, self);
     if (active) { ZUSNoteBlocked(self, _cmd, cat); return 0; }
-    ZUSProbePass(self, _cmd, cat);
     if (orig) return ((long long (*)(__unsafe_unretained id, SEL, void *, void *, void *, void *))orig)(self, _cmd, a1, a2, a3, a4);
     return 0;
 }
@@ -1251,7 +1241,6 @@ static long long ZUSHook6(__unsafe_unretained id self, SEL _cmd, void *a1, void 
     ZUSNoteCalledOnce(self, _cmd, key);
     BOOL active = ZUSActiveForCall(cat, self);
     if (active) { ZUSNoteBlocked(self, _cmd, cat); return 0; }
-    ZUSProbePass(self, _cmd, cat);
     if (orig) return ((long long (*)(__unsafe_unretained id, SEL, void *, void *, void *, void *, void *, void *))orig)(self, _cmd, a1, a2, a3, a4, a5, a6);
     return 0;
 }
@@ -1336,25 +1325,48 @@ static long gHookedTotal = 0;
 
 // ===== Cửa seenTime: móc RIÊNG đúng kiểu (1.1.3 bổ sung) =====
 // InboxDataManager.processUpdateStatus…seenTime:… có tham số double nên bộ
-// móc chung bị cổng an toàn từ chối ở mọi bản trước: cửa này không để lại
-// dòng log nào và không bị chặn — đúng triệu chứng "đang mở sẵn đoạn chat,
-// tin mới tới thì bị seen" mà anh gặp. Hàm thay thế khai ĐÚNG chữ ký gốc
-// (double đi qua nguyên vẹn khi chuyển tiếp). Chặn khi nhóm đã-xem đang
-// bật VÀ lần gọi mang mốc seenTime > 0; 40 lần gọi đầu ghi lại giá trị (1.3.4 nới từ 10)
-// (status/seenTime/UI/DB + quyết định) để đối chiếu trên máy thật.
+// móc chung bị cổng an toàn từ chối ở mọi bản trước — hàm thay thế khai
+// ĐÚNG chữ ký gốc (double đi qua nguyên vẹn khi chuyển tiếp).
+// 1.4.4 — THẢ CỬA NÀY (anh chốt 2026-11-27 sau khi bằng chứng chốt
+// hạ): quy tắc cũ "nhóm đã-xem bật + seenTime > 0 thì chặn" hoá ra
+// chặn đúng cập nhật ĐÃ NHẬN của tin MÌNH GỬI. Log 1.4.3 + ảnh hai
+// đầu của anh chứng minh tới từng giây: mỗi lần anh gửi tin (cửa
+// Inbox ghi status=2 cho qua) thì 1–4 giây sau cửa này được gọi với
+// status=3 và seenTime BẰNG ĐÚNG mốc giờ của tin vừa gửi (21:40:47→
+// seenTime 21:40:46, 21:40:55→21:40:55, 21:41:11→21:41:11,
+// 21:42:19→21:42:19) — bản cũ CHẶN tất cả nên máy anh kẹt "Đã gửi"
+// trong khi PC hiện "Đã nhận". Nghĩa đúng của tham số: seenTime ở
+// cửa này là MỐC GIỜ CỦA TIN ĐƯỢC CẬP NHẬT TRẠNG THÁI và status=3
+// là ĐÃ NHẬN — không phải "ai đó đã xem lúc nào" như tên gọi gợi ý
+// (cách đọc cũ từ 1.1.3 là sai). Cửa này chỉ ÁP trạng thái vào hồ sơ
+// cục bộ (updateUI/updateDB trên máy anh), không gửi gì ra ngoài:
+// phía tin ĐẾN, bên kia biết anh đã nhận/đã xem hay không là do các
+// cửa BÁO CÁO (send…DeliveredMessages, sendSeen…, addChatSeen…)
+// quyết định — các cửa đó vẫn chặn nguyên; độ đậm chưa-đọc do cửa
+// giảm số chưa đọc giữ. Từ 1.4.4: cho qua 100%, chỉ ghi bằng chứng
+// (40 lần gọi đầu + mọi lần status>=3, trần 300/phiên) để vòng kiểm
+// chứng hai đầu đối chiếu.
 typedef void (*ZUSSeenTimeIMP)(__unsafe_unretained id, SEL, __unsafe_unretained id, long long, unsigned long long, double, BOOL, BOOL);
 static ZUSSeenTimeIMP gZUSOrigSeenTime = NULL;
 static int gZUSSeenTimeCalls = 0;
+static int gZUSSeenTimeHigh = 0;
+static BOOL gZUSSeenTimeHighFull = NO;
 
 static void ZUSSeenTimeHook(__unsafe_unretained id self, SEL _cmd, __unsafe_unretained id threadId, long long msgType, unsigned long long newStatus, double seenTime, BOOL updateUI, BOOL updateDB) {
-    BOOL block = ZUSActiveForCat(1) && seenTime > 0;
+    // 1.4.4: KHÔNG chặn nữa — cho qua nguyên vẹn 100% (xem ghi chú
+    // trên đầu mục), chỉ ghi bằng chứng như cửa Inbox ở 1.4.2.
     if (gZUSSeenTimeCalls < 40) {
         gZUSSeenTimeCalls++;
-        ZUSLog(@"cửa seenTime gọi lần %d: status=%llu seenTime=%.0f UI=%d DB=%d -> %@", gZUSSeenTimeCalls, newStatus, seenTime, updateUI, updateDB, block ? @"CHẶN" : @"cho qua");
+        ZUSLog(@"cửa seenTime gọi lần %d: status=%llu seenTime=%.0f UI=%d DB=%d -> cho qua (1.4.4: không chặn nữa)", gZUSSeenTimeCalls, newStatus, seenTime, updateUI, updateDB);
     }
-    if (block) {
-        ZUSNoteBlocked(self, _cmd, 1);
-        return;
+    if (newStatus >= 3) {
+        if (gZUSSeenTimeHigh < 300) {
+            gZUSSeenTimeHigh++;
+            ZUSLog(@"cửa seenTime [status>=3 #%d]: thread=%@ status=%llu seenTime=%.0f UI=%d DB=%d -> cho qua (1.4.4)", gZUSSeenTimeHigh, threadId, newStatus, seenTime, updateUI, updateDB);
+        } else if (!gZUSSeenTimeHighFull) {
+            gZUSSeenTimeHighFull = YES;
+            ZUSLog(@"cửa seenTime: đã đủ 300 dòng bằng chứng status>=3 — ngừng ghi tới hết phiên");
+        }
     }
     if (gZUSOrigSeenTime) gZUSOrigSeenTime(self, _cmd, threadId, msgType, newStatus, seenTime, updateUI, updateDB);
 }
@@ -1371,7 +1383,7 @@ static void ZUSInstallSeenTimeHook(Class cls, Method m, BOOL isClass) {
     }
     gZUSOrigSeenTime = (ZUSSeenTimeIMP)orig;
     gHookedTotal++;
-    ZUSLog(@"đã móc [đã-xem] %@.%@ enc=%s (móc riêng đúng kiểu — có tham số double)", NSStringFromClass(cls), NSStringFromSelector(sel), method_getTypeEncoding(m));
+    ZUSLog(@"đã móc [đã-xem] %@.%@ enc=%s (móc riêng đúng kiểu — có tham số double; 1.4.4 — KHÔNG chặn nữa, chỉ ghi bằng chứng)", NSStringFromClass(cls), NSStringFromSelector(sel), method_getTypeEncoding(m));
 }
 
 // ===== Cửa trạng thái Inbox 5 tham số: móc RIÊNG theo newStatus (1.3.4) =====
@@ -2695,7 +2707,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.4.3";
+    prof[@"_version"] = @"1.4.4";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -3414,7 +3426,7 @@ static UIImage *ZUSOrbHeroImage(void) {
             @{@"kind": @"action", @"title": @"Xem nhật ký", @"act": @"logview", @"icon": @"log"},
             @{@"kind": @"action", @"title": @"Báo cáo lỗi (.ips)", @"act": @"crashlist", @"icon": @"warn"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.3 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.4 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -6290,7 +6302,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.4.3 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.4.4 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
