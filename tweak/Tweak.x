@@ -1,4 +1,30 @@
-// ZUS 1.4.0 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.4.2 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+//
+// 1.4.2 — LÀM CẢ HAI PHƯƠNG ÁN A + B cho vụ "Đã nhận" (anh chốt
+// 2026-11-27, dựng trên bộ 1.4.1 mới nhất): cửa trạng thái Inbox 5 tham
+// số (processUpdateStatus…withNewStatus:withUI:withDB:) từ nay KHÔNG
+// CHẶN bất kỳ trạng thái nào nữa (A) — 1.3.4 chặn status==3 theo thang
+// đã-xem mượn từ cửa seenTime, mà triệu chứng máy anh (tin mình gửi
+// dừng ở "Đã gửi", không lên "Đã nhận") khớp với 3 ở cửa này là ĐÃ
+// NHẬN. Tin mình gửi sẽ hiện đủ Đang gửi → Đã nhận → Đã xem; riêng tư
+// phía tin đến do cửa mạng + cửa seenTime gánh như cũ. Đồng thời móc
+// này thành tai mắt (B): ghi 40 lần gọi đầu + mọi lần status>=3 (trần
+// 300/phiên) kèm threadId/msgType/UI/DB vào ZUS.log — vòng sau cần
+// chặn lại thì có bằng chứng của CHÍNH cửa này. Đánh đổi đã nói rõ:
+// người gửi tin đến có thể thấy "đã nhận" ngay khi tin tới máy mình —
+// chờ bài test 2 chiều của anh phán quyết. Ngoài cửa này ra không
+// đụng gì khác; 2 trang báo lỗi của 1.4.1 giữ nguyên.
+//
+// 1.4.1 — BÁO LỖI NHANH (anh chốt 2026-11-27, mẫu "Xem nhật ký" của
+// DailyWallpaperPro): mục Trạng thái thêm 2 dòng — "Xem nhật ký" mở
+// trang đọc ~300KB cuối của ZUS.log ngay trong Zalo, có nút Chia sẻ
+// (gửi TRỌN file gốc), Làm mới và Xoá (hỏi lại trước; an toàn vì
+// ZUSLog ghi nối tiếp từng dòng rồi đóng file ngay); "Báo cáo lỗi
+// (.ips)" quét /var/mobile/Library/Logs/CrashReporter + /Library/Logs/
+// CrashReporter tìm file Zalo*.ips mới nhất (tối đa 40), chạm là chia
+// sẻ thẳng — mỗi lượt quét ghi kết quả vào log để biết thư mục có đọc
+// được từ trong Zalo hay không. CHỈ thêm 2 trang xem/gửi, lõi chặn 45
+// cửa + móc trạng thái Inbox giữ nguyên; vụ "Đã nhận" (A/B) vẫn để sau.
 //
 // 1.4.0 — HOÀN THIỆN GIAO DIỆN + ICON theo bộ xem trước anh duyệt
 // (2026-11-27): đầu trang lớn cho 3 tab Riêng tư / Dữ liệu / Cá nhân hoá
@@ -1311,25 +1337,43 @@ static void ZUSInstallSeenTimeHook(Class cls, Method m, BOOL isClass) {
 // (Đang gửi → Đã gửi/Đã nhận) đi qua đúng cửa này nên bị nuốt cả UI lẫn DB:
 // tin tới tay người nhận mà máy mình kẹt chữ "Đang gửi" tới khi bên kia đọc
 // (anh chứng minh 2026-11-27: nhiều máy, Wi-Fi lẫn 5G, gỡ tweak hoặc
-// vnodebypass là hết). Nay theo đúng mẫu cửa seenTime: khai đúng chữ ký gốc,
-// CHỈ chặn khi newStatus == 3 — giá trị đã-xem, bằng chứng từ log máy thật:
-// mọi lần gọi của cửa seenTime (cùng họ, cùng class) đều status=3 kèm
-// seenTime>0. Mọi trạng thái khác cho qua nguyên vẹn. 40 lần gọi đầu ghi log
-// đủ msgType/newStatus/UI/DB + quyết định để đối chiếu: nếu trên máy thật có
-// lần đã-xem nào mang status khác 3, log này phơi ra ngay cho vòng sau.
+// vnodebypass là hết). 1.3.4 móc riêng theo mẫu cửa seenTime: chỉ chặn khi
+// newStatus == 3 (giá trị đã-xem MƯỢN từ log của cửa seenTime — cùng họ,
+// cùng class, mọi lần gọi đều status=3 kèm seenTime>0).
+// 1.4.2 — anh chốt làm CẢ HAI phương án A + B (2026-11-27): máy anh báo
+// tin mình gửi dừng ở "Đã gửi", không bao giờ lên "Đã nhận" — triệu chứng
+// khớp 1:1 với việc 3 ở ĐÚNG cửa này là ĐÃ NHẬN chứ không phải đã-xem
+// (thang giá trị mượn từ cửa seenTime là sai cho cửa này; log máy anh
+// trước giờ chỉ bắt được status=2 cho qua, chưa từng có status=3 nào của
+// cửa này để đối chiếu trực tiếp). (A) Từ bản này cửa này KHÔNG CHẶN bất
+// kỳ trạng thái nào nữa — cho qua nguyên vẹn 100%, tin mình gửi hiện đủ
+// Đang gửi → Đã nhận → Đã xem; quyền riêng tư phía tin ĐẾN vẫn do các
+// cửa mạng + cửa seenTime gánh (không đụng). (B) Đồng thời ghi bằng
+// chứng riêng cho đúng cửa này: 40 lần gọi đầu (mọi status) + mọi lần
+// status>=3 (trần 300/phiên) kèm threadId/msgType/UI/DB — vòng sau nếu
+// cần chặn lại thì chặn theo bằng chứng của CHÍNH cửa này. Đánh đổi đã
+// nói rõ với anh: cửa này phục vụ cả 2 chiều mà tham số không có cờ
+// chiều, nên phía tin đến, người gửi CÓ THỂ thấy "đã nhận" ngay khi tin
+// tới máy mình (trước khi mình mở chat) — chờ bài test 2 chiều của anh.
 typedef void (*ZUSInboxStatusIMP)(__unsafe_unretained id, SEL, __unsafe_unretained id, long long, unsigned long long, BOOL, BOOL);
 static ZUSInboxStatusIMP gZUSOrigInboxStatus = NULL;
 static int gZUSInboxStatusCalls = 0;
+static int gZUSInboxStatusHigh = 0;
+static BOOL gZUSInboxStatusHighFull = NO;
 
 static void ZUSInboxStatusHook(__unsafe_unretained id self, SEL _cmd, __unsafe_unretained id threadId, long long msgType, unsigned long long newStatus, BOOL withUI, BOOL withDB) {
-    BOOL block = ZUSActiveForCat(1) && newStatus == 3;
     if (gZUSInboxStatusCalls < 40) {
         gZUSInboxStatusCalls++;
-        ZUSLog(@"cửa trạng thái Inbox gọi lần %d: msgType=%lld newStatus=%llu UI=%d DB=%d -> %@", gZUSInboxStatusCalls, msgType, newStatus, withUI, withDB, block ? @"CHẶN (đã-xem)" : @"cho qua");
+        ZUSLog(@"cửa trạng thái Inbox gọi lần %d: thread=%@ msgType=%lld newStatus=%llu UI=%d DB=%d -> cho qua (A)", gZUSInboxStatusCalls, threadId, msgType, newStatus, withUI, withDB);
     }
-    if (block) {
-        ZUSNoteBlocked(self, _cmd, 1);
-        return;
+    if (newStatus >= 3) {
+        if (gZUSInboxStatusHigh < 300) {
+            gZUSInboxStatusHigh++;
+            ZUSLog(@"cửa trạng thái Inbox [status>=3 #%d]: thread=%@ msgType=%lld newStatus=%llu UI=%d DB=%d -> cho qua (A), ghi bằng chứng (B)", gZUSInboxStatusHigh, threadId, msgType, newStatus, withUI, withDB);
+        } else if (!gZUSInboxStatusHighFull) {
+            gZUSInboxStatusHighFull = YES;
+            ZUSLog(@"cửa trạng thái Inbox: đã ghi đủ 300 dòng status>=3 — ngừng ghi chi tiết tới hết phiên");
+        }
     }
     if (gZUSOrigInboxStatus) gZUSOrigInboxStatus(self, _cmd, threadId, msgType, newStatus, withUI, withDB);
 }
@@ -1346,7 +1390,7 @@ static void ZUSInstallInboxStatusHook(Class cls, Method m, BOOL isClass) {
     }
     gZUSOrigInboxStatus = (ZUSInboxStatusIMP)orig;
     gHookedTotal++;
-    ZUSLog(@"đã móc [đã-xem] %@.%@ enc=%s (móc riêng 1.3.4 — chỉ chặn newStatus=3)", NSStringFromClass(cls), NSStringFromSelector(sel), method_getTypeEncoding(m));
+    ZUSLog(@"đã móc [đã-xem] %@.%@ enc=%s (móc riêng 1.3.4; 1.4.2 — KHÔNG chặn nữa (A), chỉ ghi bằng chứng status>=3 (B))", NSStringFromClass(cls), NSStringFromSelector(sel), method_getTypeEncoding(m));
 }
 
 // ---------------- Lắp móc theo danh sách ----------------
@@ -1395,9 +1439,10 @@ static void ZUSInstallWhitelist(void) {
             ZUSInstallSeenTimeHook(cls, m, isClass);
             continue;
         }
-        // 1.3.4: cửa trạng thái Inbox 5 tham số cũng móc riêng (chỉ chặn
-        // newStatus=3) — xem ZUSInboxStatusHook. Mục vẫn nằm nguyên trong
-        // danh sách trắng nên tổng 45 cửa không đổi.
+        // 1.3.4: cửa trạng thái Inbox 5 tham số cũng móc riêng — xem
+        // ZUSInboxStatusHook (1.4.2: không chặn nữa (A) + ghi bằng chứng
+        // status>=3 (B)). Mục vẫn nằm nguyên trong danh sách trắng nên
+        // tổng 45 cửa không đổi.
         if (e->argc == 5 && strcmp(e->cls, "InboxDataManager") == 0 &&
             strcmp(e->sel, "processUpdateStatusInboxEntityThreadId:msgType:withNewStatus:withUI:withDB:") == 0) {
             ZUSInstallInboxStatusHook(cls, m, isClass);
@@ -2605,7 +2650,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.4.0";
+    prof[@"_version"] = @"1.4.2";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -2783,6 +2828,171 @@ static UIImage *ZUSOrbHeroImage(void) {
     CGImageRelease(crop);
     return cached;
 }
+
+// ---------------- 1.4.1: Xem nhật ký + Báo cáo lỗi ----------------
+// Mục đích (anh chốt 2026-11-27): báo lỗi cho nhanh — khỏi đào Filza /
+// Cài đặt → Phân tích. Trang nhật ký hiện ~300KB CUỐI của ZUS.log (file
+// từng dài 100 nghìn dòng, nạp hết là treo), nút Chia sẻ gửi TRỌN file
+// gốc. Xoá log an toàn vì ZUSLog mở file ghi nối tiếp từng dòng rồi
+// đóng ngay. Trang báo cáo lỗi quét thư mục CrashReporter tìm file
+// Zalo*.ips mới nhất, chạm là chia sẻ; MỖI lượt quét đều ghi kết quả
+// vào ZUS.log để biết thư mục có đọc được từ trong Zalo hay không.
+@interface ZUSLogViewController : UIViewController
+@end
+
+@implementation ZUSLogViewController {
+    UITextView *_tv;
+    NSString *_path;
+}
+
+- (NSString *)zus_resolvedLogPath {
+    if (gLogPath.length) return gLogPath;
+    NSString *docs = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    return [docs stringByAppendingPathComponent:@"ZUS.log"];
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"Nhật ký ZUS";
+    _path = [self zus_resolvedLogPath];
+    NSDictionary *t = ZUSTheme();
+    self.view.backgroundColor = t[@"bg"];
+    _tv = [[UITextView alloc] initWithFrame:self.view.bounds];
+    _tv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _tv.editable = NO;
+    _tv.backgroundColor = [UIColor clearColor];
+    _tv.textColor = t[@"text"];
+    UIFont *mf = [UIFont fontWithName:@"Menlo" size:11];
+    _tv.font = mf ?: [UIFont systemFontOfSize:11];
+    [self.view addSubview:_tv];
+    UIBarButtonItem *share = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAction target:self action:@selector(zus_shareLog:)];
+    UIBarButtonItem *refresh = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh target:self action:@selector(zus_reloadLog)];
+    UIBarButtonItem *trash = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemTrash target:self action:@selector(zus_clearLog)];
+    self.navigationItem.rightBarButtonItems = @[trash, share, refresh];
+    [self zus_reloadLog];
+}
+
+- (void)zus_reloadLog {
+    NSData *d = [NSData dataWithContentsOfFile:_path];
+    if (!d.length) {
+        _tv.text = @"Chưa có file nhật ký.\n\nBật \"Ghi log gỡ lỗi\" trong bảng ZUS rồi dùng Zalo một lúc — log sẽ tự ghi vào file ZUS.log, quay lại đây bấm Làm mới là thấy.";
+        return;
+    }
+    NSUInteger maxB = 300 * 1024;
+    BOOL cut = d.length > maxB;
+    if (cut) d = [d subdataWithRange:NSMakeRange(d.length - maxB, maxB)];
+    NSString *s = [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding];
+    if (!s) s = [[NSString alloc] initWithData:d encoding:NSISOLatin1StringEncoding];
+    if (!s) s = @"";
+    if (cut) {
+        NSRange nl = [s rangeOfString:@"\n"];
+        if (nl.location != NSNotFound && nl.location < 1024) s = [s substringFromIndex:nl.location + 1];
+        s = [NSString stringWithFormat:@"… (chỉ hiện ~300KB cuối — bấm nút Chia sẻ để gửi TRỌN file)\n\n%@", s];
+    }
+    _tv.text = s;
+    [self.view layoutIfNeeded];
+    if (_tv.text.length > 1) [_tv scrollRangeToVisible:NSMakeRange(_tv.text.length - 1, 1)];
+}
+
+- (void)zus_shareLog:(UIBarButtonItem *)sender {
+    if (![[NSFileManager defaultManager] fileExistsAtPath:_path]) { [self zus_reloadLog]; return; }
+    UIActivityViewController *av = [[UIActivityViewController alloc] initWithActivityItems:@[[NSURL fileURLWithPath:_path]] applicationActivities:nil];
+    av.popoverPresentationController.barButtonItem = sender;
+    [self presentViewController:av animated:YES completion:nil];
+}
+
+- (void)zus_clearLog {
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Xoá nhật ký?" message:@"Toàn bộ file ZUS.log sẽ bị xoá trắng. Log mới sẽ ghi lại từ lần dùng Zalo tiếp theo." preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"Huỷ" style:UIAlertActionStyleCancel handler:nil]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Xoá" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *act) {
+        [@"" writeToFile:_path atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        ZUSLog(@"nhật ký: đã xoá trắng file log từ trang Xem nhật ký");
+        [self zus_reloadLog];
+    }]];
+    [self presentViewController:a animated:YES completion:nil];
+}
+@end
+
+@interface ZUSCrashListController : UITableViewController
+@property (nonatomic, strong) NSArray *zusFiles;
+@end
+
+@implementation ZUSCrashListController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"Báo cáo lỗi";
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh target:self action:@selector(zus_rescan)];
+    [self zus_rescan];
+}
+
+- (void)zus_rescan {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSArray *dirs = @[@"/var/mobile/Library/Logs/CrashReporter", @"/Library/Logs/CrashReporter"];
+    NSMutableArray *found = [NSMutableArray array];
+    for (NSString *dir in dirs) {
+        NSError *err = nil;
+        NSArray *items = [fm contentsOfDirectoryAtPath:dir error:&err];
+        NSUInteger matched = 0;
+        for (NSString *name in items) {
+            NSString *low = [name lowercaseString];
+            if ([low containsString:@"zalo"] && [[low pathExtension] isEqualToString:@"ips"]) {
+                [found addObject:[dir stringByAppendingPathComponent:name]];
+                matched++;
+            }
+        }
+        ZUSLog(@"báo cáo lỗi: thư mục %@ — %@, %lu mục, khớp %lu file Zalo (.ips)", dir,
+               items ? @"đọc được" : [NSString stringWithFormat:@"KHÔNG đọc được (%@)", err.localizedDescription ?: @"không rõ"],
+               (unsigned long)items.count, (unsigned long)matched);
+    }
+    [found sortUsingComparator:^NSComparisonResult(NSString *a, NSString *b) {
+        NSDate *da = [fm attributesOfItemAtPath:a error:nil][NSFileModificationDate] ?: [NSDate distantPast];
+        NSDate *db = [fm attributesOfItemAtPath:b error:nil][NSFileModificationDate] ?: [NSDate distantPast];
+        return [db compare:da];
+    }];
+    if (found.count > 40) found = [[found subarrayWithRange:NSMakeRange(0, 40)] mutableCopy];
+    self.zusFiles = found;
+    [self.tableView reloadData];
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return self.zusFiles.count ? (NSInteger)self.zusFiles.count : 1;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+    return self.zusFiles.count ? @"Chạm vào một báo cáo để chia sẻ — gửi thẳng file .ips qua khung chat cho em." : nil;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
+    if (!self.zusFiles.count) {
+        cell.textLabel.text = @"Chưa thấy báo cáo lỗi nào của Zalo. Nếu Zalo vừa văng, đợi vài giây rồi bấm nút Làm mới ở góc phải. Lượt quét đã ghi vào ZUS.log — thư mục được quét: /var/mobile/Library/Logs/CrashReporter.";
+        cell.textLabel.numberOfLines = 0;
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        return cell;
+    }
+    NSString *path = self.zusFiles[(NSUInteger)indexPath.row];
+    cell.textLabel.text = [path lastPathComponent];
+    cell.textLabel.numberOfLines = 2;
+    NSDictionary *at = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:nil];
+    NSDate *md = at[NSFileModificationDate];
+    unsigned long long sz = [at[NSFileSize] unsignedLongLongValue];
+    NSDateFormatter *df = [[NSDateFormatter alloc] init];
+    df.dateFormat = @"dd/MM/yyyy HH:mm";
+    cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ • %.0f KB", md ? [df stringFromDate:md] : @"—", sz / 1024.0];
+    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (!self.zusFiles.count) return;
+    NSString *path = self.zusFiles[(NSUInteger)indexPath.row];
+    UIActivityViewController *av = [[UIActivityViewController alloc] initWithActivityItems:@[[NSURL fileURLWithPath:path]] applicationActivities:nil];
+    av.popoverPresentationController.sourceView = [tableView cellForRowAtIndexPath:indexPath];
+    [self presentViewController:av animated:YES completion:nil];
+}
+@end
 
 @implementation ZUSSettingsController
 
@@ -3156,8 +3366,10 @@ static UIImage *ZUSOrbHeroImage(void) {
         ]}];
         [secs addObject:@{@"header": @"Trạng thái", @"rows": @[
             @{@"kind": @"action", @"title": @"Xem trạng thái dò", @"act": @"diag", @"icon": @"activity"},
+            @{@"kind": @"action", @"title": @"Xem nhật ký", @"act": @"logview", @"icon": @"activity"},
+            @{@"kind": @"action", @"title": @"Báo cáo lỗi (.ips)", @"act": @"crashlist", @"icon": @"export"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.0 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.2 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -3566,6 +3778,8 @@ static UIImage *ZUSOrbHeroImage(void) {
         else if ([act isEqualToString:@"export"]) [self zus_exportProfile];
         else if ([act isEqualToString:@"import"]) [self zus_importProfile];
         else if ([act isEqualToString:@"diag"]) [self zu_showDiag];
+        else if ([act isEqualToString:@"logview"]) [self zu_showLog];
+        else if ([act isEqualToString:@"crashlist"]) [self zu_showCrashReports];
         else if ([act isEqualToString:@"vault"]) [self zus_showVault];
         else if ([act isEqualToString:@"copycode"]) {
             [UIPasteboard generalPasteboard].string = ZUSDeviceCode();
@@ -3765,6 +3979,16 @@ static UIImage *ZUSOrbHeroImage(void) {
     NSString *summary = ZUSImportProfile();
     [self zu_refresh];
     [self zus_showMessage:summary];
+}
+
+- (void)zu_showLog {
+    ZUSLogViewController *vc = [[ZUSLogViewController alloc] init];
+    [self.navigationController pushViewController:vc animated:YES];
+}
+
+- (void)zu_showCrashReports {
+    ZUSCrashListController *vc = [[ZUSCrashListController alloc] initWithStyle:UITableViewStyleGrouped];
+    [self.navigationController pushViewController:vc animated:YES];
 }
 
 - (void)zu_showDiag {
@@ -6021,7 +6245,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.4.0 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.4.2 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
