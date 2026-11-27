@@ -1,4 +1,33 @@
-// ZUS 1.4.5 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.4.7 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+//
+// 1.4.7 — XÁC NHẬN GỌI: GẮN CỔNG VÀO CỬA GỌI THẬT (anh chốt
+// 2026-11-27 sau test 1.4.5, giữ nguyên bộ code chuẩn 1.4.6 — chỉ
+// đụng mục Cuộc gọi): log máy anh chỉ đích danh cửa gọi đi thật là
+// ZLCallManager.callWithUserId:withCallType:withSource: (3 tham
+// số, chạy đầu tiên khi bấm gọi). Bản này: (1) cổng typed 3 tham
+// số ZUSConfirmHook3 lắp thẳng vào cửa thật, kiểm chữ ký lúc lắp —
+// popup hiện trên màn hình chat TRƯỚC khi cuộc gọi xảy ra, anh
+// bấm Gọi mới cho hàm gốc chạy; (2) gỡ vai trò cổng của móc
+// CallKit (chặng sau của đường gọi, giữ nó làm popup hiện muộn
+// sau màn hình gọi như anh gặp ở 1.4.5) — nó trở lại làm móc dò
+// trong lưới; (3) lưới nhận thêm dạng cổng 3 tham số (@,số,số) và
+// siết: hàm dựng giao diện (add/layout/section) chỉ gắn dò. Kho
+// thu hồi của 1.4.6 giữ nguyên từng dòng.
+//
+// 1.4.6 — KHO THU HỒI ĐẦY ĐỦ TÊN (anh chốt 2026-11-27, giữ nguyên
+// bộ code chuẩn 1.4.5 — chỉ đụng mục Kho thu hồi): log máy anh cho
+// thấy lưới khoá đoán cũ trích ra cả ba trường đều TRỐNG (đoạn,
+// người gửi, mã đoạn) nên thẻ kho chỉ còn nội dung + link. Bản này:
+// (1) lưới khoá RỘNG trên item + các object lồng một cấp để trích
+// mã người gửi (lưu riêng 'suid'), mã đoạn, tên nhóm, bằng chứng
+// nhóm/cá nhân (khoá isGroup, khoá groupName) — lưu thêm 'gtype';
+// (2) thẻ kho tra bổ sung tên theo mã trong DANH BẠ (đường
+// BuddyEntity đã kiểm chứng 266 bạn): mã người gửi → tên người
+// gửi, mã đoạn 1-1 → tên đối tác + nhãn Cá nhân; dòng phụ hiện
+// nhãn Nhóm/Cá nhân kèm tên đoạn; (3) dump cấu trúc THẬT của item
+// bị thu hồi (3 lần đầu mỗi phiên, tiền tố "kho dump #") để nếu
+// lưới khoá vẫn trượt trường nào thì log chỉ đích danh thuộc tính
+// thật cho vòng nối tiếp. Mọi phần ngoài Kho thu hồi không đổi.
 //
 // 1.4.5 — SỬA XÁC NHẬN TRƯỚC KHI GỌI: TRỎ CỔNG POPUP SANG LƯỚI
 // CỬA GỌI THẬT (anh chốt làm trước 2026-11-27, giữ nguyên bộ code
@@ -924,6 +953,66 @@ static void ZUSNoteCalledOnce(id self, SEL _cmd, NSString *key) {
 // Mỗi lần một cửa chống thu hồi chặn thành công, cất nội dung tin (văn
 // bản / đường link media) vào kho trong prefs để xem lại ở tab Dữ liệu,
 // kể cả khi đoạn chat gốc đã trôi. Tối đa 200 tin gần nhất.
+static NSString *ZUSStringField(id obj, NSArray *keys);
+
+// 1.4.6: các object lồng một cấp trong item (bỏ qua kiểu nguyên
+// thuỷ/tập hợp) — tin bị thu hồi thường bọc object tin/đoạn chat ở
+// trong, nơi chứa mã người gửi và mã đoạn chat thật.
+static NSArray *ZUSVaultEmbeddedObjects(__unsafe_unretained id item) {
+    NSMutableArray *out = [NSMutableArray array];
+    unsigned pc = 0;
+    objc_property_t *pl = class_copyPropertyList(object_getClass(item), &pc);
+    for (unsigned i = 0; i < pc && out.count < 12; i++) {
+        NSString *pn = @(property_getName(pl[i]));
+        id v = nil;
+        @try { v = [item valueForKey:pn]; } @catch (NSException *e) {}
+        if (!v) continue;
+        if ([v isKindOfClass:[NSString class]] || [v isKindOfClass:[NSNumber class]] ||
+            [v isKindOfClass:[NSURL class]] || [v isKindOfClass:[NSDate class]] ||
+            [v isKindOfClass:[NSData class]] || [v isKindOfClass:[NSArray class]] ||
+            [v isKindOfClass:[NSDictionary class]] || [v isKindOfClass:[NSSet class]]) continue;
+        [out addObject:@[pn, v]];
+    }
+    if (pl) free(pl);
+    return out;
+}
+
+// 1.4.6: dump cấu trúc THẬT của item bị thu hồi — toàn bộ tên thuộc
+// tính/ivar + giá trị các trường định danh. Bằng chứng để nối tên
+// đúng khoá thay cho đoán tên (log 1.4.0: cả ba trường tên đều trống
+// vì lưới khoá đoán không trúng thuộc tính nào của đời Zalo này).
+static void ZUSVaultDumpObject(__unsafe_unretained id obj, NSString *label, int idx) {
+    if (!obj) return;
+    Class cls = object_getClass(obj);
+    NSMutableArray *names = [NSMutableArray array];
+    unsigned pc = 0;
+    objc_property_t *pl = class_copyPropertyList(cls, &pc);
+    for (unsigned i = 0; i < pc; i++) [names addObject:@(property_getName(pl[i]))];
+    if (pl) free(pl);
+    NSMutableArray *ivars = [NSMutableArray array];
+    unsigned ic = 0;
+    Ivar *il = class_copyIvarList(cls, &ic);
+    for (unsigned i = 0; i < ic; i++) [ivars addObject:@(ivar_getName(il[i]))];
+    if (il) free(il);
+    ZUSLog(@"kho dump #%d %@: lớp %@ — thuộc tính (%u): %@", idx, label, NSStringFromClass(cls), pc, [names componentsJoinedByString:@", "]);
+    if (ivars.count) ZUSLog(@"kho dump #%d %@: ivar (%lu): %@", idx, label, (unsigned long)ivars.count, [ivars componentsJoinedByString:@", "]);
+    NSMutableArray *ids = [NSMutableArray array];
+    for (NSString *pn in names) {
+        NSString *l = [pn lowercaseString];
+        if (!([l containsString:@"uid"] || [l containsString:@"from"] || [l containsString:@"sender"] ||
+              [l containsString:@"thread"] || [l containsString:@"owner"] || [l containsString:@"author"] ||
+              [l containsString:@"user"] || [l containsString:@"group"] || [l containsString:@"type"] ||
+              [l hasSuffix:@"id"] || [l isEqualToString:@"id"])) continue;
+        id v = nil;
+        @try { v = [obj valueForKey:pn]; } @catch (NSException *e) {}
+        if ([v isKindOfClass:[NSString class]]) [ids addObject:[NSString stringWithFormat:@"%@='%@'", pn, [(NSString *)v length] > 40 ? [[(NSString *)v substringToIndex:40] stringByAppendingString:@"…"] : v]];
+        else if ([v isKindOfClass:[NSNumber class]]) [ids addObject:[NSString stringWithFormat:@"%@=%@", pn, v]];
+        else if (v) [ids addObject:[NSString stringWithFormat:@"%@=(%@)", pn, NSStringFromClass([v class])]];
+        if (ids.count >= 25) break;
+    }
+    if (ids.count) ZUSLog(@"kho dump #%d %@: định danh — %@", idx, label, [ids componentsJoinedByString:@", "]);
+}
+
 static void ZUSVaultCapture(__unsafe_unretained id item) {
     @try {
         static NSArray *textKeys = nil;
@@ -1044,14 +1133,70 @@ static void ZUSVaultCapture(__unsafe_unretained id item) {
                 if (sender) break;
             }
         }
+        // 1.4.6: lưới khoá RỘNG trên item + các object lồng một cấp,
+        // chỉ lấp chỗ trống lưới khoá cũ để lại: mã người gửi (lưu
+        // riêng 'suid' để thẻ kho tra tên trong danh bạ lúc hiển
+        // thị), mã đoạn, tên nhóm, bằng chứng nhóm/cá nhân.
+        NSString *senderUid = nil;
+        NSString *gtype = nil;
+        {
+            NSMutableArray *cands = [NSMutableArray arrayWithObject:item];
+            for (NSArray *pair in ZUSVaultEmbeddedObjects(item)) [cands addObject:pair[1]];
+            static NSArray *suidKeys = nil;
+            if (!suidKeys) suidKeys = @[@"fromUid", @"senderUid", @"senderId", @"senderID", @"fromUserId", @"fromUserID", @"ownerId", @"authorId", @"fromId", @"uid", @"userId", @"userid", @"userID", @"sender_id", @"from_uid"];
+            for (id c in cands) {
+                NSString *v = ZUSStringField(c, suidKeys);
+                if (v.length) { senderUid = v; break; }
+            }
+            if (!threadId) {
+                static NSArray *tidKeys2 = nil;
+                if (!tidKeys2) tidKeys2 = @[@"threadID", @"thread_id", @"conversationID", @"chatID", @"groupId", @"groupID", @"toUid", @"toId", @"receiverId"];
+                for (id c in cands) {
+                    NSString *v = ZUSStringField(c, tidKeys2);
+                    if (v.length) { threadId = v; break; }
+                }
+            }
+            if (!chatName) {
+                for (id c in cands) {
+                    if (c == item) continue;
+                    NSString *v = ZUSStringField(c, @[@"groupName"]);
+                    if (v.length && v.length <= 80) { chatName = v; gtype = @"group"; break; }
+                }
+            }
+            if (!chatName) {
+                static NSArray *chatKeys2 = nil;
+                if (!chatKeys2) chatKeys2 = @[@"conversationName", @"chatName", @"threadName", @"title", @"name"];
+                for (id c in cands) {
+                    if (c == item) continue;
+                    NSString *v = ZUSStringField(c, chatKeys2);
+                    if (v.length && v.length <= 80) { chatName = v; break; }
+                }
+            }
+            for (id c in cands) {
+                id gv = nil;
+                @try { gv = [c valueForKey:@"isGroup"]; } @catch (NSException *e) {}
+                if ([gv isKindOfClass:[NSNumber class]]) { gtype = [gv boolValue] ? @"group" : @"single"; break; }
+            }
+        }
+        // 1.4.6: dump cấu trúc thật của item (3 lần đầu mỗi phiên).
+        static int vaultDumpCount = 0;
+        if (vaultDumpCount < 3) {
+            vaultDumpCount++;
+            ZUSVaultDumpObject(item, @"item", vaultDumpCount);
+            for (NSArray *pair in ZUSVaultEmbeddedObjects(item)) {
+                ZUSVaultDumpObject(pair[1], [NSString stringWithFormat:@"lồng '%@'", pair[0]], vaultDumpCount);
+            }
+        }
         static int capLog = 0;
-        if (capLog++ < 5) ZUSLog(@"kho thu hồi: trích tên — đoạn '%@', người gửi '%@', mã đoạn %@", chatName ?: @"(trống)", sender ?: @"(trống)", threadId ?: @"(trống)");
+        if (capLog++ < 5) ZUSLog(@"kho thu hồi: trích tên — đoạn '%@', người gửi '%@', mã đoạn %@, mã người gửi %@, loại %@", chatName ?: @"(trống)", sender ?: @"(trống)", threadId ?: @"(trống)", senderUid ?: @"(trống)", gtype ?: @"(chưa rõ)");
         NSDateFormatter *tf = [[NSDateFormatter alloc] init];
         tf.dateFormat = @"dd/MM HH:mm";
         [vault insertObject:@{@"time": [tf stringFromDate:[NSDate date]],
                               @"chat": chatName ?: (gZUSCurrentThreadName ?: @""),
                               @"thread": threadId ?: @"",
                               @"sender": sender ?: @"",
+                              @"suid": senderUid ?: @"",
+                              @"gtype": gtype ?: @"",
                               @"text": text ?: @"",
                               @"url": url ?: @"",
                               @"dkey": dkey} atIndex:0];
@@ -2099,6 +2244,27 @@ static NSArray *ZUSMissingFriendsFromPath(NSString *path) {
 @end
 
 
+// 1.4.6: tra tên theo mã trong danh bạ bạn bè (đường BuddyEntity đã
+// kiểm chứng: zaloid/userid → displayname/contactname). Bản đồ dựng
+// một lần mỗi phiên, dùng lại cho mọi thẻ kho.
+static NSMutableDictionary *gVaultNameMap = nil;
+static NSString *ZUSVaultNameForUid(NSString *uid) {
+    if (!uid.length) return nil;
+    if (!gVaultNameMap) {
+        gVaultNameMap = [NSMutableDictionary dictionary];
+        @try {
+            NSArray *raw = ZUSCollectFriends();
+            for (id f in raw) {
+                NSDictionary *d = ZUSFriendDict(f);
+                NSString *fid = d[@"id"], *nm = d[@"name"];
+                if (fid.length && nm.length) gVaultNameMap[fid] = nm;
+            }
+        } @catch (NSException *e) {}
+        ZUSLog(@"kho thu hồi: bản đồ tên danh bạ dựng xong — %lu mã", (unsigned long)gVaultNameMap.count);
+    }
+    return gVaultNameMap[uid];
+}
+
 @interface ZUSVaultController : UITableViewController
 @property (nonatomic, strong) NSArray *zusEntries;
 @end
@@ -2129,11 +2295,22 @@ static NSArray *ZUSMissingFriendsFromPath(NSString *path) {
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
     NSDictionary *e = self.zusEntries[(NSUInteger)indexPath.row];
   @try {
-    NSString *name = [e[@"sender"] length] ? e[@"sender"] : ([e[@"chat"] length] ? e[@"chat"] : @"Đoạn chat");
-    // 1.3.9: dòng phụ = tên đoạn chat khi người gửi khác tên đoạn chat
-    // (chat nhóm: biết tin của ai, ở nhóm nào).
-    NSString *sub = ([e[@"sender"] length] && [e[@"chat"] length] && ![e[@"sender"] isEqualToString:e[@"chat"]])
-        ? [NSString stringWithFormat:@"trong %@", e[@"chat"]] : nil;
+    // 1.4.6: tên người gửi tra bổ sung theo mã trong danh bạ khi thẻ
+    // chưa có tên; tên đoạn cá nhân tra theo mã đoạn (mã đoạn 1-1
+    // chính là mã của đối tác) → chốt luôn nhãn Cá nhân.
+    NSString *senderName = e[@"sender"];
+    if (![senderName length] && [e[@"suid"] length]) senderName = ZUSVaultNameForUid(e[@"suid"]) ?: @"";
+    NSString *chatName = e[@"chat"];
+    NSString *typeLabel = [e[@"gtype"] isEqualToString:@"group"] ? @"Nhóm" : ([e[@"gtype"] isEqualToString:@"single"] ? @"Cá nhân" : nil);
+    if (![chatName length] && [e[@"thread"] length]) {
+        NSString *tn = ZUSVaultNameForUid(e[@"thread"]);
+        if (tn.length) { chatName = tn; if (!typeLabel) typeLabel = @"Cá nhân"; }
+    }
+    NSString *name = [senderName length] ? senderName : ([chatName length] ? chatName : @"Đoạn chat");
+    NSMutableArray *subParts = [NSMutableArray array];
+    if (typeLabel) [subParts addObject:typeLabel];
+    if ([chatName length] && ![chatName isEqualToString:name]) [subParts addObject:[NSString stringWithFormat:@"trong %@", chatName]];
+    NSString *sub = subParts.count ? [subParts componentsJoinedByString:@" · "] : nil;
     UIView *card = [[UIView alloc] initWithFrame:CGRectZero];
     card.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.09];
     card.layer.cornerRadius = 18;
@@ -2723,7 +2900,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.4.5";
+    prof[@"_version"] = @"1.4.7";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -3442,7 +3619,7 @@ static UIImage *ZUSOrbHeroImage(void) {
             @{@"kind": @"action", @"title": @"Xem nhật ký", @"act": @"logview", @"icon": @"log"},
             @{@"kind": @"action", @"title": @"Báo cáo lỗi (.ips)", @"act": @"crashlist", @"icon": @"warn"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.5 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.7 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -5449,58 +5626,61 @@ static void ZUSConfirmHook4(id self, SEL _cmd, id a1, long long a2, long long a3
     });
 }
 
-// 1.4.5: móc typed cho dạng chữ ký của CallKitFlowManager
-// .startCallId:partnerID:hasVideo:completion: (enc thật trong dump
-// 25/11: v44@0:8q16q24B32@?36 — số nguyên, số nguyên, BOOL, block).
-// Đây là cửa xin hệ thống bắt đầu cuộc gọi ĐI qua CallKit — ứng viên
-// cửa gọi thật mạnh nhất rút ra từ log: 4 cửa móc thẳng cũ chưa từng
-// bắt được lần nào trong 4 ngày log (xem ghi chú lưới dưới đây).
-static id gPendCKSelf = nil;
-static SEL gPendCKSel = NULL;
-static long long gPendCKA1 = 0;
-static long long gPendCKA2 = 0;
-static BOOL gPendCKA3 = NO;
-static id gPendCKA4 = nil;
-static void *gPendCKOrig = NULL;
+// 1.4.7: móc typed cho CỬA GỌI ĐI THẬT — ZLCallManager
+// .callWithUserId:withCallType:withSource: (3 tham số). Bằng chứng
+// log 1.4.5 (máy anh, 27/11 22:57:27): hàm này chạy ĐẦU TIÊN khi
+// anh bấm gọi, trước cả dựng màn hình gọi và trước CallKit ~1 giây;
+// bản 4 tham số withParams: mà các móc thẳng cũ canh là đường cũ
+// không ai đi. Giữ hàm này = giữ ngay vạch xuất phát: hàm gốc chưa
+// chạy thì chưa có gì xảy ra, popup hiện ngay trên màn hình chat.
+// (Móc CallKit của 1.4.5 đã gỡ khỏi vai trò cổng — nó là chặng sau,
+// giữ nó làm popup hiện muộn sau màn hình gọi; từ 1.4.7 nó chỉ còn
+// là móc dò trong lưới.)
+static id gPend3Self = nil;
+static SEL gPend3Sel = NULL;
+static id gPend3A1 = nil;
+static long long gPend3A2 = 0;
+static long long gPend3A3 = 0;
+static void *gPend3Orig = NULL;
 
-static void ZUSRunPendingCallCK(void) {
-    if (!gPendCKOrig) return;
+static void ZUSRunPendingCall3(void) {
+    if (!gPend3Orig) return;
     gConfirmShowing = NO;
-    void *o = gPendCKOrig;
-    id sf = gPendCKSelf; SEL c = gPendCKSel; long long a1 = gPendCKA1, a2 = gPendCKA2; BOOL a3 = gPendCKA3; id a4 = gPendCKA4;
-    gPendCKOrig = NULL; gPendCKSelf = nil; gPendCKA4 = nil; gPendCKSel = NULL;
-    ((void (*)(id, SEL, long long, long long, BOOL, id))o)(sf, c, a1, a2, a3, a4);
+    void *o = gPend3Orig;
+    id sf = gPend3Self; SEL c = gPend3Sel; id a1 = gPend3A1; long long a2 = gPend3A2, a3 = gPend3A3;
+    gPend3Orig = NULL; gPend3Self = nil; gPend3A1 = nil; gPend3Sel = NULL;
+    ((void (*)(id, SEL, id, long long, long long))o)(sf, c, a1, a2, a3);
 }
 
-static void ZUSConfirmHookCK(__unsafe_unretained id self, SEL _cmd, long long a1, long long a2, BOOL a3, __unsafe_unretained id a4) {
-    static int fireCK = 0;
-    if (++fireCK <= 10) ZUSLog(@"xác nhận gọi: móc CallKit bắt được lần %d: %@.%@ (công tắc %@)", fireCK, NSStringFromClass(object_getClass(self)), NSStringFromSelector(_cmd), gConfirmCall ? @"BẬT" : @"tắt");
+static void ZUSConfirmHook3(__unsafe_unretained id self, SEL _cmd, __unsafe_unretained id a1, long long a2, long long a3) {
+    static int fire3 = 0;
+    if (++fire3 <= 10) ZUSLog(@"xác nhận gọi: móc cửa thật bắt được lần %d: %@.%@ (công tắc %@)", fire3, NSStringFromClass(object_getClass(self)), NSStringFromSelector(_cmd), gConfirmCall ? @"BẬT" : @"tắt");
     NSString *key = [NSString stringWithFormat:@"%@|%@", NSStringFromClass(object_getClass(self)), NSStringFromSelector(_cmd)];
     void *orig = [gConfirmOrigs[key] pointerValue];
     if (!orig) return;
     if (!gConfirmCall || !gEnabled || !gLicensed) {
-        ((void (*)(__unsafe_unretained id, SEL, long long, long long, BOOL, __unsafe_unretained id))orig)(self, _cmd, a1, a2, a3, a4);
+        ((void (*)(__unsafe_unretained id, SEL, __unsafe_unretained id, long long, long long))orig)(self, _cmd, a1, a2, a3);
         return;
     }
     if (gConfirmShowing) {
-        ((void (*)(__unsafe_unretained id, SEL, long long, long long, BOOL, __unsafe_unretained id))orig)(self, _cmd, a1, a2, a3, a4);
+        ((void (*)(__unsafe_unretained id, SEL, __unsafe_unretained id, long long, long long))orig)(self, _cmd, a1, a2, a3);
         return;
     }
-    gPendCKSelf = self; gPendCKSel = _cmd; gPendCKA1 = a1; gPendCKA2 = a2; gPendCKA3 = a3; gPendCKA4 = a4; gPendCKOrig = orig;
+    gPend3Self = self; gPend3Sel = _cmd; gPend3A1 = a1; gPend3A2 = a2; gPend3A3 = a3; gPend3Orig = orig;
     gConfirmShowing = YES;
-    ZUSLog(@"xác nhận gọi: giữ lại %@.%@ (dạng CallKit) chờ anh xác nhận", NSStringFromClass(object_getClass(self)), NSStringFromSelector(_cmd));
+    ZUSLog(@"xác nhận gọi: giữ lại %@.%@ (cửa gọi thật) chờ anh xác nhận", NSStringFromClass(object_getClass(self)), NSStringFromSelector(_cmd));
     dispatch_async(dispatch_get_main_queue(), ^{
         UIViewController *vc = ZUSTopVC();
-        if (!vc) { ZUSRunPendingCallCK(); return; }
+        if (!vc) { ZUSRunPendingCall3(); return; }
         NSString *who = gZUSCurrentThreadName.length ? gZUSCurrentThreadName : @"người này";
         UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Xác nhận cuộc gọi"
             message:[NSString stringWithFormat:@"Bắt đầu cuộc gọi với %@?", who] preferredStyle:UIAlertControllerStyleAlert];
         [a addAction:[UIAlertAction actionWithTitle:@"Huỷ" style:UIAlertActionStyleCancel handler:^(UIAlertAction *act) {
             gConfirmShowing = NO;
-            gPendCKOrig = NULL; gPendCKSelf = nil; gPendCKA4 = nil; gPendCKSel = NULL;
+            gPend3Orig = NULL; gPend3Self = nil; gPend3A1 = nil; gPend3Sel = NULL;
             ZUSLog(@"xác nhận gọi: anh đã huỷ cuộc gọi");
         }]];
-        [a addAction:[UIAlertAction actionWithTitle:@"Gọi" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) { ZUSRunPendingCallCK(); }]];
+        [a addAction:[UIAlertAction actionWithTitle:@"Gọi" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) { ZUSRunPendingCall3(); }]];
         [vc presentViewController:a animated:YES completion:nil];
     });
 }
@@ -5603,6 +5783,37 @@ static BOOL ZUSConfirmTryHook(NSString *clsName, NSString *selName, BOOL want4) 
     return YES;
 }
 
+// 1.4.7: lắp cổng typed 3 tham số vào cửa gọi thật, kiểm chữ ký
+// (@, số nguyên, số nguyên) + trả void ngay lúc lắp; không khớp
+// thì không gắn cổng (lưới dò vẫn bao phủ hàm đó như thường).
+static BOOL ZUSConfirmTryHook3(NSString *clsName, NSString *selName) {
+    Class cls = objc_getClass(clsName.UTF8String);
+    if (!cls) return NO;
+    SEL sel = sel_registerName(selName.UTF8String);
+    Method m = class_getInstanceMethod(cls, sel);
+    if (!m) { ZUSLog(@"xác nhận gọi: không thấy %@.%@", clsName, selName); return NO; }
+    NSString *e = [NSString stringWithUTF8String:method_getTypeEncoding(m) ?: ""];
+    char at[3] = {0, 0, 0};
+    for (int k = 0; k < 3; k++) {
+        char *t = method_copyArgumentType(m, (unsigned)(k + 2));
+        if (t) { at[k] = t[0]; free(t); }
+    }
+    BOOL ints = (at[1] == 'q' || at[1] == 'Q' || at[1] == 'i' || at[1] == 'I' || at[1] == 'l' || at[1] == 'L') &&
+                (at[2] == 'q' || at[2] == 'Q' || at[2] == 'i' || at[2] == 'I' || at[2] == 'l' || at[2] == 'L');
+    if (![e hasPrefix:@"v"] || method_getNumberOfArguments(m) != 5 || at[0] != '@' || !ints) {
+        ZUSLog(@"xác nhận gọi: %@.%@ chữ ký không khớp dạng cổng 3 tham số (enc=%@) — không gắn cổng", clsName, selName, e);
+        return NO;
+    }
+    NSString *key = [NSString stringWithFormat:@"%@|%@", clsName, selName];
+    if (gConfirmOrigs[key]) return YES;
+    void *orig = NULL;
+    MSHookMessageEx(cls, sel, (IMP)ZUSConfirmHook3, (IMP *)&orig);
+    if (!orig) return NO;
+    gConfirmOrigs[key] = [NSValue valueWithPointer:orig];
+    ZUSLog(@"xác nhận gọi: đã móc CỔNG vào cửa gọi thật %@.%@", clsName, selName);
+    return YES;
+}
+
 // ----- 1.4.5: lưới cửa gọi thật -----
 // Chẩn đoán từ log 4 ngày (11-24 → 11-27, ~90 phiên): 4 móc thẳng cũ
 // lắp thành công mọi phiên nhưng số lần bắt được cuộc gọi = 0 — các
@@ -5615,9 +5826,12 @@ static BOOL ZUSConfirmTryHook(NSString *clsName, NSString *selName, BOOL want4) 
 // log chỉ mặt cửa thật cho vòng sau. Mọi ứng viên đều qua cổng an
 // toàn chữ ký ZUSEncodingIsSafeN + chỉ nhận hàm trả void; trần 48
 // móc; hàm 0 tham số chỉ gắn dò (điểm bắt đầu gọi thật luôn mang
-// theo đối tượng đích). Ứng viên sáng nhất là dạng (q,q,B,block)
-// của CallKitFlowManager.startCallId:partnerID:hasVideo:completion:
-// — có móc typed riêng ZUSConfirmHookCK ở trên.
+// theo đối tượng đích). Cập nhật 1.4.7: cửa gọi thật đã xác định
+// là ZLCallManager.callWithUserId:withCallType:withSource: (cổng
+// typed 3 tham số ở trên, lắp thẳng); dạng (q,q,B,block) của
+// CallKitFlowManager.startCallId:... là CHẶNG SAU của đường gọi
+// nên chỉ gắn dò; các hàm dựng giao diện (tên chứa add/layout/
+// section) cũng chỉ gắn dò, không bao giờ gắn cổng.
 static NSMutableDictionary *gCallProbeOrigs = nil;
 static int gCallProbeLog = 0;
 
@@ -5689,15 +5903,19 @@ static int ZUSInstallConfirmCallNet(void) {
                 IMP repl = NULL;
                 BOOL isGate = NO;
                 if (argc == 1 && at[0] == '@') { repl = (IMP)ZUSConfirmHook1; isGate = YES; }
+                else if (argc == 3 && at[0] == '@' && (at[1] == 'q' || at[1] == 'Q' || at[1] == 'i' || at[1] == 'I' || at[1] == 'l' || at[1] == 'L') && (at[2] == 'q' || at[2] == 'Q' || at[2] == 'i' || at[2] == 'I' || at[2] == 'l' || at[2] == 'L')) { repl = (IMP)ZUSConfirmHook3; isGate = YES; }
                 else if (argc == 4 && at[0] == '@' && (at[1] == 'q' || at[1] == 'Q') && (at[2] == 'q' || at[2] == 'Q') && at[3] == '@') { repl = (IMP)ZUSConfirmHook4; isGate = YES; }
-                else if (argc == 4 && (at[0] == 'q' || at[0] == 'Q') && (at[1] == 'q' || at[1] == 'Q') && (at[2] == 'B' || at[2] == 'c' || at[2] == 'C') && at[3] == '@') { repl = (IMP)ZUSConfirmHookCK; isGate = YES; }
+                // 1.4.7: hàm dựng giao diện không bao giờ là cổng —
+                // bản 1.4.5 đã gắn cổng oan vào _addMinimizeVideo
+                // CallSection: của trang Cài đặt cuộc gọi.
+                if (isGate && ([sl containsString:@"add"] || [sl containsString:@"layout"] || [sl containsString:@"section"])) isGate = NO;
                 void *orig = NULL;
                 if (isGate) {
                     MSHookMessageEx(classes[i], method_getName(m), repl, (IMP *)&orig);
-                    if (orig) { gConfirmOrigs[key] = [NSValue valueWithPointer:orig]; gates++; ZUSLog(@"cổng gọi: đã gắn CỔNG vào %@ (lưới 1.4.5)", key); }
+                    if (orig) { gConfirmOrigs[key] = [NSValue valueWithPointer:orig]; gates++; ZUSLog(@"cổng gọi: đã gắn CỔNG vào %@ (lưới 1.4.7)", key); }
                 } else {
                     MSHookMessageEx(classes[i], method_getName(m), (IMP)ZUSCallProbeHook, (IMP *)&orig);
-                    if (orig) { gCallProbeOrigs[key] = @[[NSValue valueWithPointer:orig], @(argc)]; probes++; ZUSLog(@"cổng gọi: đã gắn DÒ vào %@ (lưới 1.4.5)", key); }
+                    if (orig) { gCallProbeOrigs[key] = @[[NSValue valueWithPointer:orig], @(argc)]; probes++; ZUSLog(@"cổng gọi: đã gắn DÒ vào %@ (lưới 1.4.7)", key); }
                 }
             }
             free(ml);
@@ -5715,6 +5933,7 @@ static void ZUSInstallConfirmCall(void) {
     int n = 0;
     if (!gConfirmInstalled) {
         if (ZUSConfirmTryHook(@"ZLCallManager", @"callWithUserId:withCallType:withSource:withParams:", YES)) n++;
+        if (ZUSConfirmTryHook3(@"ZLCallManager", @"callWithUserId:withCallType:withSource:")) n++;
         if (ZUSConfirmTryHook(@"ZACallOARouter", @"makeCallOAToUserId:callType:sourceCall:data:", YES)) n++;
         if (ZUSConfirmTryHook(@"ZLCallManager", @"switchToVideoCallWithCompletion:", NO)) n++;
         if (ZUSConfirmTryHook(@"GroupCallPresentationInterface", @"startCallWithSession:", NO)) n++;
@@ -6504,7 +6723,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.4.5 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.4.7 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
