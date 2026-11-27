@@ -1,4 +1,20 @@
-// ZUS 1.4.4 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.4.5 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+//
+// 1.4.5 — SỬA XÁC NHẬN TRƯỚC KHI GỌI: TRỎ CỔNG POPUP SANG LƯỚI
+// CỬA GỌI THẬT (anh chốt làm trước 2026-11-27, giữ nguyên bộ code
+// chuẩn 1.4.4 — chỉ đụng mục Cuộc gọi): chẩn đoán từ log 4 ngày cho
+// thấy 4 móc thẳng cũ chưa từng bắt được cuộc gọi nào (các hàm đó
+// là đường cũ của Zalo 26.x, nút gọi không đi qua nữa). Bản này:
+// (1) trải lưới lên mọi hàm khả nghi là điểm bắt đầu cuộc gọi đi
+// trong các lớp image Zalo có tên chứa "call" — chữ ký khớp dạng
+// cổng thì gắn CỔNG xác nhận (popup chạy ngay), lạ nhưng an toàn
+// thì gắn DÒ ghi log; (2) thêm móc typed riêng cho dạng
+// (q,q,B,block) của CallKitFlowManager.startCallId:partnerID:
+// hasVideo:completion: — cửa xin CallKit bắt đầu cuộc gọi đi, ứng
+// viên mạnh nhất từ dump class 25/11; (3) cờ chống chồng popup:
+// một cổng đang giữ thì các cổng khác cho qua thẳng. Popup, cơ chế
+// giữ/gọi tiếp và 4 móc thẳng cũ giữ nguyên; mọi phần ngoài mục
+// Cuộc gọi không đổi một dòng so với 1.4.4.
 //
 // 1.4.4 — SỬA VỤ "ĐÃ NHẬN": THẢ CỬA seenTime (anh chốt 2026-11-27
 // sau khi bằng chứng chốt hạ ở vòng 1.4.3): cửa seenTime không chặn
@@ -2707,7 +2723,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.4.4";
+    prof[@"_version"] = @"1.4.5";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -3426,7 +3442,7 @@ static UIImage *ZUSOrbHeroImage(void) {
             @{@"kind": @"action", @"title": @"Xem nhật ký", @"act": @"logview", @"icon": @"log"},
             @{@"kind": @"action", @"title": @"Báo cáo lỗi (.ips)", @"act": @"crashlist", @"icon": @"warn"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.4 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.5 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -5313,6 +5329,10 @@ static void ZUSInstallCallBlock(void) {
 
 // ----- Xác nhận trước khi gọi -----
 static NSMutableDictionary *gConfirmOrigs = nil;
+// 1.4.5: cờ chống chồng popup — khi một cổng đang giữ cuộc gọi chờ anh
+// chọn, các cổng khác bắt gặp cùng cuộc gọi đó thì cho qua thẳng,
+// tránh 2 hộp thoại xếp chồng cho 1 lần bấm gọi.
+static BOOL gConfirmShowing = NO;
 static id gPendSelf = nil;
 static SEL gPendSel = NULL;
 static id gPendA1 = nil;
@@ -5321,6 +5341,7 @@ static int gPendArgc = 0;
 
 static void ZUSRunPendingCall(void) {
     if (!gPendOrig) return;
+    gConfirmShowing = NO;
     void *o = gPendOrig;
     id s = gPendSelf, a = gPendA1;
     SEL c = gPendSel;
@@ -5337,7 +5358,13 @@ static void ZUSConfirmGate(id self, SEL _cmd, id a1, void *orig, int argc) {
         else ((void (*)(id, SEL))orig)(self, _cmd);
         return;
     }
+    if (gConfirmShowing) {
+        if (argc == 1) ((void (*)(id, SEL, id))orig)(self, _cmd, a1);
+        else ((void (*)(id, SEL))orig)(self, _cmd);
+        return;
+    }
     gPendSelf = self; gPendSel = _cmd; gPendA1 = a1; gPendOrig = orig; gPendArgc = argc;
+    gConfirmShowing = YES;
     ZUSLog(@"xác nhận gọi: giữ lại %@.%@ chờ anh xác nhận", NSStringFromClass(object_getClass(self)), NSStringFromSelector(_cmd));
     dispatch_async(dispatch_get_main_queue(), ^{
         UIViewController *vc = ZUSTopVC();
@@ -5346,6 +5373,7 @@ static void ZUSConfirmGate(id self, SEL _cmd, id a1, void *orig, int argc) {
         UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Xác nhận cuộc gọi"
             message:[NSString stringWithFormat:@"Bắt đầu cuộc gọi với %@?", who] preferredStyle:UIAlertControllerStyleAlert];
         [a addAction:[UIAlertAction actionWithTitle:@"Huỷ" style:UIAlertActionStyleCancel handler:^(UIAlertAction *act) {
+            gConfirmShowing = NO;
             gPendOrig = NULL; gPendSelf = nil; gPendA1 = nil; gPendSel = NULL;
             ZUSLog(@"xác nhận gọi: anh đã huỷ cuộc gọi");
         }]];
@@ -5381,6 +5409,7 @@ static void *gPend4Orig = NULL;
 
 static void ZUSRunPendingCall4(void) {
     if (!gPend4Orig) return;
+    gConfirmShowing = NO;
     void *o = gPend4Orig;
     id sf = gPend4Self; SEL c = gPend4Sel; id a1 = gPend4A1; long long a2 = gPend4A2, a3 = gPend4A3; id a4 = gPend4A4;
     gPend4Orig = NULL; gPend4Self = nil; gPend4A1 = nil; gPend4A4 = nil; gPend4Sel = NULL;
@@ -5397,7 +5426,12 @@ static void ZUSConfirmHook4(id self, SEL _cmd, id a1, long long a2, long long a3
         ((void (*)(id, SEL, id, long long, long long, id))orig)(self, _cmd, a1, a2, a3, a4);
         return;
     }
+    if (gConfirmShowing) {
+        ((void (*)(id, SEL, id, long long, long long, id))orig)(self, _cmd, a1, a2, a3, a4);
+        return;
+    }
     gPend4Self = self; gPend4Sel = _cmd; gPend4A1 = a1; gPend4A2 = a2; gPend4A3 = a3; gPend4A4 = a4; gPend4Orig = orig;
+    gConfirmShowing = YES;
     ZUSLog(@"xác nhận gọi: giữ lại %@.%@ (dạng 4 tham số) chờ anh xác nhận", NSStringFromClass(object_getClass(self)), NSStringFromSelector(_cmd));
     dispatch_async(dispatch_get_main_queue(), ^{
         UIViewController *vc = ZUSTopVC();
@@ -5406,10 +5440,67 @@ static void ZUSConfirmHook4(id self, SEL _cmd, id a1, long long a2, long long a3
         UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Xác nhận cuộc gọi"
             message:[NSString stringWithFormat:@"Bắt đầu cuộc gọi với %@?", who] preferredStyle:UIAlertControllerStyleAlert];
         [a addAction:[UIAlertAction actionWithTitle:@"Huỷ" style:UIAlertActionStyleCancel handler:^(UIAlertAction *act) {
+            gConfirmShowing = NO;
             gPend4Orig = NULL; gPend4Self = nil; gPend4A1 = nil; gPend4A4 = nil; gPend4Sel = NULL;
             ZUSLog(@"xác nhận gọi: anh đã huỷ cuộc gọi");
         }]];
         [a addAction:[UIAlertAction actionWithTitle:@"Gọi" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) { ZUSRunPendingCall4(); }]];
+        [vc presentViewController:a animated:YES completion:nil];
+    });
+}
+
+// 1.4.5: móc typed cho dạng chữ ký của CallKitFlowManager
+// .startCallId:partnerID:hasVideo:completion: (enc thật trong dump
+// 25/11: v44@0:8q16q24B32@?36 — số nguyên, số nguyên, BOOL, block).
+// Đây là cửa xin hệ thống bắt đầu cuộc gọi ĐI qua CallKit — ứng viên
+// cửa gọi thật mạnh nhất rút ra từ log: 4 cửa móc thẳng cũ chưa từng
+// bắt được lần nào trong 4 ngày log (xem ghi chú lưới dưới đây).
+static id gPendCKSelf = nil;
+static SEL gPendCKSel = NULL;
+static long long gPendCKA1 = 0;
+static long long gPendCKA2 = 0;
+static BOOL gPendCKA3 = NO;
+static id gPendCKA4 = nil;
+static void *gPendCKOrig = NULL;
+
+static void ZUSRunPendingCallCK(void) {
+    if (!gPendCKOrig) return;
+    gConfirmShowing = NO;
+    void *o = gPendCKOrig;
+    id sf = gPendCKSelf; SEL c = gPendCKSel; long long a1 = gPendCKA1, a2 = gPendCKA2; BOOL a3 = gPendCKA3; id a4 = gPendCKA4;
+    gPendCKOrig = NULL; gPendCKSelf = nil; gPendCKA4 = nil; gPendCKSel = NULL;
+    ((void (*)(id, SEL, long long, long long, BOOL, id))o)(sf, c, a1, a2, a3, a4);
+}
+
+static void ZUSConfirmHookCK(__unsafe_unretained id self, SEL _cmd, long long a1, long long a2, BOOL a3, __unsafe_unretained id a4) {
+    static int fireCK = 0;
+    if (++fireCK <= 10) ZUSLog(@"xác nhận gọi: móc CallKit bắt được lần %d: %@.%@ (công tắc %@)", fireCK, NSStringFromClass(object_getClass(self)), NSStringFromSelector(_cmd), gConfirmCall ? @"BẬT" : @"tắt");
+    NSString *key = [NSString stringWithFormat:@"%@|%@", NSStringFromClass(object_getClass(self)), NSStringFromSelector(_cmd)];
+    void *orig = [gConfirmOrigs[key] pointerValue];
+    if (!orig) return;
+    if (!gConfirmCall || !gEnabled || !gLicensed) {
+        ((void (*)(__unsafe_unretained id, SEL, long long, long long, BOOL, __unsafe_unretained id))orig)(self, _cmd, a1, a2, a3, a4);
+        return;
+    }
+    if (gConfirmShowing) {
+        ((void (*)(__unsafe_unretained id, SEL, long long, long long, BOOL, __unsafe_unretained id))orig)(self, _cmd, a1, a2, a3, a4);
+        return;
+    }
+    gPendCKSelf = self; gPendCKSel = _cmd; gPendCKA1 = a1; gPendCKA2 = a2; gPendCKA3 = a3; gPendCKA4 = a4; gPendCKOrig = orig;
+    gConfirmShowing = YES;
+    ZUSLog(@"xác nhận gọi: giữ lại %@.%@ (dạng CallKit) chờ anh xác nhận", NSStringFromClass(object_getClass(self)), NSStringFromSelector(_cmd));
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIViewController *vc = ZUSTopVC();
+        if (!vc) { ZUSRunPendingCallCK(); return; }
+        NSString *who = gZUSCurrentThreadName.length ? gZUSCurrentThreadName : @"người này";
+        UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Xác nhận cuộc gọi"
+            message:[NSString stringWithFormat:@"Bắt đầu cuộc gọi với %@?", who] preferredStyle:UIAlertControllerStyleAlert];
+        [a addAction:[UIAlertAction actionWithTitle:@"Huỷ" style:UIAlertActionStyleCancel handler:^(UIAlertAction *act) {
+            gConfirmShowing = NO;
+            gPendCKOrig = NULL; gPendCKSelf = nil; gPendCKA4 = nil; gPendCKSel = NULL;
+            ZUSLog(@"xác nhận gọi: anh đã huỷ cuộc gọi");
+        }]];
+        [a addAction:[UIAlertAction actionWithTitle:@"Gọi" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) { ZUSRunPendingCallCK(); }]];
         [vc presentViewController:a animated:YES completion:nil];
     });
 }
@@ -5512,21 +5603,132 @@ static BOOL ZUSConfirmTryHook(NSString *clsName, NSString *selName, BOOL want4) 
     return YES;
 }
 
+// ----- 1.4.5: lưới cửa gọi thật -----
+// Chẩn đoán từ log 4 ngày (11-24 → 11-27, ~90 phiên): 4 móc thẳng cũ
+// lắp thành công mọi phiên nhưng số lần bắt được cuộc gọi = 0 — các
+// hàm đó còn tồn tại trong bản Zalo 26.x nhưng nút gọi không còn đi
+// qua chúng (đường cũ). Bản này trải một lưới lên MỌI hàm khả nghi là
+// điểm bắt đầu cuộc gọi ĐI trong các lớp thuộc image Zalo có tên chứa
+// "call": chữ ký khớp một trong các dạng cổng thì gắn CỔNG xác nhận
+// (popup chạy ngay ở bản này), chữ ký lạ nhưng an toàn thì gắn DÒ —
+// chỉ ghi log rồi cho qua nguyên vẹn, để nếu lưới cổng vẫn trượt thì
+// log chỉ mặt cửa thật cho vòng sau. Mọi ứng viên đều qua cổng an
+// toàn chữ ký ZUSEncodingIsSafeN + chỉ nhận hàm trả void; trần 48
+// móc; hàm 0 tham số chỉ gắn dò (điểm bắt đầu gọi thật luôn mang
+// theo đối tượng đích). Ứng viên sáng nhất là dạng (q,q,B,block)
+// của CallKitFlowManager.startCallId:partnerID:hasVideo:completion:
+// — có móc typed riêng ZUSConfirmHookCK ở trên.
+static NSMutableDictionary *gCallProbeOrigs = nil;
+static int gCallProbeLog = 0;
+
+static long long ZUSCallProbeHook(__unsafe_unretained id self, SEL _cmd, void *a1, void *a2, void *a3, void *a4, void *a5, void *a6) {
+    NSString *key = [NSString stringWithFormat:@"%@|%@", NSStringFromClass(object_getClass(self)), NSStringFromSelector(_cmd)];
+    if (gCallProbeLog < 60) {
+        gCallProbeLog++;
+        ZUSLog(@"dò gọi #%d: %@ (công tắc xác nhận %@) — hàm này CÓ chạy, chưa gắn cổng vì chữ ký lạ", gCallProbeLog, key, gConfirmCall ? @"BẬT" : @"tắt");
+    }
+    NSArray *rec = gCallProbeOrigs[key];
+    if (!rec) return 0;
+    void *orig = [rec[0] pointerValue];
+    int argc = [rec[1] intValue];
+    if (!orig) return 0;
+    switch (argc) {
+        case 0: return ((long long (*)(__unsafe_unretained id, SEL))orig)(self, _cmd);
+        case 1: return ((long long (*)(__unsafe_unretained id, SEL, void *))orig)(self, _cmd, a1);
+        case 2: return ((long long (*)(__unsafe_unretained id, SEL, void *, void *))orig)(self, _cmd, a1, a2);
+        case 3: return ((long long (*)(__unsafe_unretained id, SEL, void *, void *, void *))orig)(self, _cmd, a1, a2, a3);
+        case 4: return ((long long (*)(__unsafe_unretained id, SEL, void *, void *, void *, void *))orig)(self, _cmd, a1, a2, a3, a4);
+        case 5: return ((long long (*)(__unsafe_unretained id, SEL, void *, void *, void *, void *, void *))orig)(self, _cmd, a1, a2, a3, a4, a5);
+        default: return ((long long (*)(__unsafe_unretained id, SEL, void *, void *, void *, void *, void *, void *))orig)(self, _cmd, a1, a2, a3, a4, a5, a6);
+    }
+}
+
+static BOOL gConfirmNetInstalled = NO;
+static int ZUSInstallConfirmCallNet(void) {
+    if (gConfirmNetInstalled) return 0;
+    if (!gCallProbeOrigs) gCallProbeOrigs = [NSMutableDictionary dictionary];
+    int gates = 0, probes = 0;
+    @try {
+        NSArray *patterns = @[@"startcall", @"makecall", @"callwith", @"callto", @"placecall", @"initiatecall", @"requestcall", @"calluser", @"voicecall", @"videocall", @"startvoice", @"startvideo", @"calltap", @"tapcall", @"callbutton", @"callaction"];
+        NSArray *exclude = @[@"set", @"update", @"did", @"will", @"handle", @"receive", @"incoming", @"end", @"stop", @"finish", @"config", @"enable", @"state", @"answer", @"delete", @"fail", @"decline", @"reject", @"report", @"canmake", @"should", @"switch", @"exist"];
+        unsigned cc = 0;
+        Class *classes = objc_copyClassList(&cc);
+        for (unsigned i = 0; i < cc; i++) {
+            if (!ZUSClassIsZaloImage(classes[i])) continue;
+            NSString *cn = NSStringFromClass(classes[i]);
+            if (![[cn lowercaseString] containsString:@"call"]) continue;
+            unsigned mc = 0;
+            Method *ml = class_copyMethodList(classes[i], &mc);
+            for (unsigned j = 0; j < mc; j++) {
+                if (gates + probes >= 48) break;
+                Method m = ml[j];
+                NSString *sn = NSStringFromSelector(method_getName(m));
+                NSString *sl = [sn lowercaseString];
+                BOOL hit = NO;
+                for (NSString *p in patterns) if ([sl containsString:p]) { hit = YES; break; }
+                if (!hit) continue;
+                BOOL bad = NO;
+                for (NSString *x in exclude) if ([sl containsString:x]) { bad = YES; break; }
+                if (bad) continue;
+                NSString *key = [NSString stringWithFormat:@"%@|%@", cn, sn];
+                if (gConfirmOrigs[key] || gCallProbeOrigs[key]) continue;
+                NSString *e = [NSString stringWithUTF8String:method_getTypeEncoding(m) ?: ""];
+                if (![e hasPrefix:@"v"]) continue;
+                int argc = (int)method_getNumberOfArguments(m) - 2;
+                if (argc < 0 || argc > 6) continue;
+                if (!ZUSEncodingIsSafeN(m, argc)) continue;
+                char at[6] = {0, 0, 0, 0, 0, 0};
+                BOOL typesOk = YES;
+                for (int k = 0; k < argc; k++) {
+                    char *t = method_copyArgumentType(m, (unsigned)(k + 2));
+                    if (!t) { typesOk = NO; break; }
+                    at[k] = t[0];
+                    free(t);
+                }
+                if (!typesOk) continue;
+                IMP repl = NULL;
+                BOOL isGate = NO;
+                if (argc == 1 && at[0] == '@') { repl = (IMP)ZUSConfirmHook1; isGate = YES; }
+                else if (argc == 4 && at[0] == '@' && (at[1] == 'q' || at[1] == 'Q') && (at[2] == 'q' || at[2] == 'Q') && at[3] == '@') { repl = (IMP)ZUSConfirmHook4; isGate = YES; }
+                else if (argc == 4 && (at[0] == 'q' || at[0] == 'Q') && (at[1] == 'q' || at[1] == 'Q') && (at[2] == 'B' || at[2] == 'c' || at[2] == 'C') && at[3] == '@') { repl = (IMP)ZUSConfirmHookCK; isGate = YES; }
+                void *orig = NULL;
+                if (isGate) {
+                    MSHookMessageEx(classes[i], method_getName(m), repl, (IMP *)&orig);
+                    if (orig) { gConfirmOrigs[key] = [NSValue valueWithPointer:orig]; gates++; ZUSLog(@"cổng gọi: đã gắn CỔNG vào %@ (lưới 1.4.5)", key); }
+                } else {
+                    MSHookMessageEx(classes[i], method_getName(m), (IMP)ZUSCallProbeHook, (IMP *)&orig);
+                    if (orig) { gCallProbeOrigs[key] = @[[NSValue valueWithPointer:orig], @(argc)]; probes++; ZUSLog(@"cổng gọi: đã gắn DÒ vào %@ (lưới 1.4.5)", key); }
+                }
+            }
+            free(ml);
+            if (gates + probes >= 48) break;
+        }
+        free(classes);
+    } @catch (NSException *e) { ZUSLog(@"cổng gọi: lỗi lắp lưới: %@", e.name); }
+    gConfirmNetInstalled = YES;
+    ZUSLog(@"cổng gọi: lưới xong — %d cổng, %d dò", gates, probes);
+    return gates + probes;
+}
+
 static void ZUSInstallConfirmCall(void) {
-    if (gConfirmInstalled) return;
     if (!gConfirmOrigs) gConfirmOrigs = [NSMutableDictionary dictionary];
     int n = 0;
-    if (ZUSConfirmTryHook(@"ZLCallManager", @"callWithUserId:withCallType:withSource:withParams:", YES)) n++;
-    if (ZUSConfirmTryHook(@"ZACallOARouter", @"makeCallOAToUserId:callType:sourceCall:data:", YES)) n++;
-    if (ZUSConfirmTryHook(@"ZLCallManager", @"switchToVideoCallWithCompletion:", NO)) n++;
-    if (ZUSConfirmTryHook(@"GroupCallPresentationInterface", @"startCallWithSession:", NO)) n++;
-    if (n) {
-        gConfirmInstalled = YES;
-        ZUSLog(@"xác nhận gọi: tổng %d móc thẳng", n);
-        return;
+    if (!gConfirmInstalled) {
+        if (ZUSConfirmTryHook(@"ZLCallManager", @"callWithUserId:withCallType:withSource:withParams:", YES)) n++;
+        if (ZUSConfirmTryHook(@"ZACallOARouter", @"makeCallOAToUserId:callType:sourceCall:data:", YES)) n++;
+        if (ZUSConfirmTryHook(@"ZLCallManager", @"switchToVideoCallWithCompletion:", NO)) n++;
+        if (ZUSConfirmTryHook(@"GroupCallPresentationInterface", @"startCallWithSession:", NO)) n++;
+        if (n) {
+            gConfirmInstalled = YES;
+            ZUSLog(@"xác nhận gọi: tổng %d móc thẳng", n);
+        }
     }
-    ZUSLog(@"xác nhận gọi: không móc thẳng được cửa nào — chạy vòng quét dự phòng");
-    ZUSInstallConfirmCallScan();
+    // 1.4.5: lưới cửa gọi thật — lắp kèm luôn, có cờ riêng chống lắp lại.
+    int net = ZUSInstallConfirmCallNet();
+    if (!gConfirmInstalled && !net) {
+        ZUSLog(@"xác nhận gọi: không móc thẳng được cửa nào — chạy vòng quét dự phòng");
+        ZUSInstallConfirmCallScan();
+    }
 }
 
 // ----- 1.3.0: gửi ảnh chất lượng gốc (dò + ép thử) -----
@@ -6302,7 +6504,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.4.4 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.4.5 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
