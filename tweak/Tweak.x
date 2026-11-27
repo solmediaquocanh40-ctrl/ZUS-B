@@ -1,4 +1,18 @@
-// ZUS 1.3.8 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.4.0 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+//
+// 1.4.0 — HOÀN THIỆN GIAO DIỆN + ICON theo bộ xem trước anh duyệt
+// (2026-11-27): đầu trang lớn cho 3 tab Riêng tư / Dữ liệu / Cá nhân hoá
+// (icon tab 68pt phát sáng neon + tiêu đề lớn, Riêng tư có dòng phụ) qua
+// tableHeaderView dựng bằng frame, dựng lại khi bề rộng bảng đổi; orb ở
+// Tổng quan cắt lấy phần giữa của icon chính (chữ ZUS phủ đầy vòng tròn)
+// + quầng sáng accent phía sau; glow icon dòng/thống kê/tab chọn tăng
+// mạnh (bán kính 8–13, đậm 0.95). Tiêu đề dòng: giữ numberOfLines = 0 +
+// chiều cao tự giãn (nay ghim thêm rowHeight/estimatedRowHeight cho
+// chắc) — chữ KHÔNG bao giờ bị cắt "...", thiếu chỗ thì xuống dòng.
+// Mục "Đoạn chat này" GIỮ BỐ CỤC BẢN CŨ theo ảnh anh gửi: các dòng phân
+// đoạn không icon (bỏ icon phoneblock em thêm ở 1.3.9), chữ tối đa 2
+// dòng. Lõi chặn 45 cửa + móc trạng thái Inbox GIỮ NGUYÊN — vụ "Đã
+// nhận" (phương án A/B) anh chốt ĐỂ LÀM SAU, bản này không đụng.
 //
 // 1.3.4 — SỬA 3 LỖI ANH CHỐT NGÀY 2026-11-27:
 // (1) "Đang gửi": cửa chung InboxDataManager.processUpdateStatus…withNewStatus:
@@ -20,6 +34,14 @@
 //     ảnh gốc / emoji / dò cuộc gọi / dò undo / dò kho / quảng cáo / link) khi
 //     tính năng tương ứng đang bật — bật giữa chừng thì lắp lúc đổi cài đặt.
 //     Lõi 45 cửa giữ nguyên byte-identical.
+//
+// 1.3.9 — ĐẸP NHƯ DEMO + KHO THU HỒI CÓ TÊN: full bộ 37 icon neon nền
+// trong suốt tạo riêng từng chiếc (khiên cho công tắc chính, đủ icon mọi
+// dòng kể cả 2 tab cuối, chấm màu cho dòng bộ màu), kính blur THẬT sau
+// thanh tab, icon phát sáng neon khi chọn/ở bộ Cinematic. Kho thu hồi:
+// trích tên đoạn chat + tên người gửi + mã đoạn chat từ chính tin bị thu
+// hồi (bản cũ lưu tên đoạn chat đang mở nên thẻ kho vô danh); thẻ hiện
+// thêm dòng "trong <nhóm>" cho chat nhóm. Lõi chặn/fix cũ giữ nguyên.
 //
 // 1.3.8 — SỬA ĐÚNG THỦ PHẠM VĂNG KHI MỞ BẢNG: log 1.3.7 dừng ngay giữa
 // viewDidLoad (sau dòng bản quyền của ZUSLoadPrefs, trước dòng bước 1/3)
@@ -892,10 +914,67 @@ static void ZUSVaultCapture(__unsafe_unretained id item) {
             @try { v = [item valueForKey:k]; } @catch (NSException *e) {}
             if ([v isKindOfClass:[NSString class]] && [v length] && [v length] <= 80) { sender = v; break; }
         }
+        // 1.3.9: trích tên ĐOẠN CHAT + mã đoạn chat từ chính đối tượng
+        // của tin bị thu hồi (bản cũ lưu tên đoạn chat ĐANG MỞ — sai khi
+        // thu hồi xảy ra ở đoạn chat khác). Thử object cuộc trò chuyện
+        // lồng trong item, rồi các khoá phẳng; tên người gửi thử thêm
+        // qua object người gửi. 5 lần đầu ghi log để đối chiếu máy thật.
+        NSString *chatName = nil;
+        NSString *threadId = nil;
+        static NSArray *convObjKeys = nil;
+        if (!convObjKeys) convObjKeys = @[@"conversation", @"chat", @"thread", @"conversationModel", @"chatModel", @"threadModel"];
+        static NSArray *convNameKeys = nil;
+        if (!convNameKeys) convNameKeys = @[@"name", @"title", @"displayName", @"groupName", @"threadName", @"chatName"];
+        static NSArray *tidKeys = nil;
+        if (!tidKeys) tidKeys = @[@"threadId", @"conversationId", @"chatId", @"threadID", @"id"];
+        id conv = nil;
+        for (NSString *k in convObjKeys) {
+            @try { conv = [item valueForKey:k]; } @catch (NSException *e) {}
+            if (conv) break;
+        }
+        if (conv) {
+            for (NSString *k in convNameKeys) {
+                id v = nil;
+                @try { v = [conv valueForKey:k]; } @catch (NSException *e) {}
+                if ([v isKindOfClass:[NSString class]] && [v length] && [v length] <= 80) { chatName = v; break; }
+            }
+            for (NSString *k in tidKeys) {
+                id v = nil;
+                @try { v = [conv valueForKey:k]; } @catch (NSException *e) {}
+                if ([v isKindOfClass:[NSString class]] && [v length]) { threadId = v; break; }
+                if ([v isKindOfClass:[NSNumber class]]) { threadId = [v stringValue]; break; }
+            }
+        }
+        if (!threadId) {
+            for (NSString *k in tidKeys) {
+                id v = nil;
+                @try { v = [item valueForKey:k]; } @catch (NSException *e) {}
+                if ([v isKindOfClass:[NSString class]] && [v length]) { threadId = v; break; }
+                if ([v isKindOfClass:[NSNumber class]]) { threadId = [v stringValue]; break; }
+            }
+        }
+        if (!sender) {
+            static NSArray *senderObjKeys = nil;
+            if (!senderObjKeys) senderObjKeys = @[@"sender", @"fromUser", @"user", @"senderUser", @"author", @"from"];
+            for (NSString *k in senderObjKeys) {
+                id so = nil;
+                @try { so = [item valueForKey:k]; } @catch (NSException *e) {}
+                if (!so || [so isKindOfClass:[NSString class]]) continue;
+                for (NSString *nk in convNameKeys) {
+                    id v = nil;
+                    @try { v = [so valueForKey:nk]; } @catch (NSException *e) {}
+                    if ([v isKindOfClass:[NSString class]] && [v length] && [v length] <= 80) { sender = v; break; }
+                }
+                if (sender) break;
+            }
+        }
+        static int capLog = 0;
+        if (capLog++ < 5) ZUSLog(@"kho thu hồi: trích tên — đoạn '%@', người gửi '%@', mã đoạn %@", chatName ?: @"(trống)", sender ?: @"(trống)", threadId ?: @"(trống)");
         NSDateFormatter *tf = [[NSDateFormatter alloc] init];
         tf.dateFormat = @"dd/MM HH:mm";
         [vault insertObject:@{@"time": [tf stringFromDate:[NSDate date]],
-                              @"chat": gZUSCurrentThreadName ?: @"",
+                              @"chat": chatName ?: (gZUSCurrentThreadName ?: @""),
+                              @"thread": threadId ?: @"",
                               @"sender": sender ?: @"",
                               @"text": text ?: @"",
                               @"url": url ?: @"",
@@ -1933,6 +2012,10 @@ static NSArray *ZUSMissingFriendsFromPath(NSString *path) {
     NSDictionary *e = self.zusEntries[(NSUInteger)indexPath.row];
   @try {
     NSString *name = [e[@"sender"] length] ? e[@"sender"] : ([e[@"chat"] length] ? e[@"chat"] : @"Đoạn chat");
+    // 1.3.9: dòng phụ = tên đoạn chat khi người gửi khác tên đoạn chat
+    // (chat nhóm: biết tin của ai, ở nhóm nào).
+    NSString *sub = ([e[@"sender"] length] && [e[@"chat"] length] && ![e[@"sender"] isEqualToString:e[@"chat"]])
+        ? [NSString stringWithFormat:@"trong %@", e[@"chat"]] : nil;
     UIView *card = [[UIView alloc] initWithFrame:CGRectZero];
     card.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.09];
     card.layer.cornerRadius = 18;
@@ -1958,6 +2041,15 @@ static NSArray *ZUSMissingFriendsFromPath(NSString *path) {
     nl.textColor = [UIColor whiteColor];
     nl.translatesAutoresizingMaskIntoConstraints = NO;
     [card addSubview:nl];
+    UILabel *subL = nil;
+    if (sub) {
+        subL = [[UILabel alloc] initWithFrame:CGRectZero];
+        subL.text = sub;
+        subL.font = [UIFont systemFontOfSize:12.5];
+        subL.textColor = [UIColor colorWithRed:0.55 green:0.70 blue:1.0 alpha:1.0];
+        subL.translatesAutoresizingMaskIntoConstraints = NO;
+        [card addSubview:subL];
+    }
     UILabel *tm = [[UILabel alloc] initWithFrame:CGRectZero];
     tm.text = e[@"time"];
     tm.font = [UIFont systemFontOfSize:12];
@@ -2002,8 +2094,15 @@ static NSArray *ZUSMissingFriendsFromPath(NSString *path) {
         [nl.trailingAnchor constraintEqualToAnchor:tm.leadingAnchor constant:-8],
         [tx.leadingAnchor constraintEqualToAnchor:nl.leadingAnchor],
         [tx.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-14],
-        [tx.topAnchor constraintEqualToAnchor:nl.bottomAnchor constant:5],
         nil];
+    if (subL) {
+        [cs addObject:[subL.leadingAnchor constraintEqualToAnchor:nl.leadingAnchor]];
+        [cs addObject:[subL.topAnchor constraintEqualToAnchor:nl.bottomAnchor constant:1]];
+        [cs addObject:[subL.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-14]];
+        [cs addObject:[tx.topAnchor constraintEqualToAnchor:subL.bottomAnchor constant:5]];
+    } else {
+        [cs addObject:[tx.topAnchor constraintEqualToAnchor:nl.bottomAnchor constant:5]];
+    }
     if (md) {
         [cs addObject:[md.leadingAnchor constraintEqualToAnchor:nl.leadingAnchor]];
         [cs addObject:[md.topAnchor constraintEqualToAnchor:tx.bottomAnchor constant:4]];
@@ -2506,7 +2605,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.3.8";
+    prof[@"_version"] = @"1.4.0";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -2650,7 +2749,40 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
 @property (nonatomic, strong) NSArray *zusSecs;
 @property (nonatomic, strong) NSDictionary *zusTheme;
 @property (nonatomic, strong) NSString *zusColorKey;
+@property (nonatomic, strong) UIView *zusTabHeader;
+@property (nonatomic) CGFloat zusTabHeaderW;
 @end
+
+// 1.3.9: chấm màu tròn cho dòng chọn bộ màu / màu tự chọn.
+static UIImage *ZUSSwatchImage(UIColor *c) {
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(28, 28), NO, 0);
+    UIBezierPath *p = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(1.5, 1.5, 25, 25)];
+    [(c ?: [UIColor grayColor]) setFill];
+    [p fill];
+    [[UIColor colorWithWhite:1.0 alpha:0.35] setStroke];
+    p.lineWidth = 1.5;
+    [p stroke];
+    UIImage *im = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return im;
+}
+
+// 1.4.0: orb hero cắt lấy phần GIỮA của icon chính — chữ ZUS phủ đầy
+// vòng tròn như mẫu xem trước anh duyệt (bản cũ để nguyên quả cầu nên
+// chữ nhỏ, viền kính chiếm chỗ). Cắt một lần rồi lưu tĩnh.
+static UIImage *ZUSOrbHeroImage(void) {
+    static UIImage *cached = nil;
+    if (cached) return cached;
+    UIImage *full = ZUSAssetImage(@"orb");
+    CGImageRef cg = full.CGImage;
+    if (!cg) { cached = full; return cached; }
+    CGFloat w = CGImageGetWidth(cg), h = CGImageGetHeight(cg);
+    CGImageRef crop = CGImageCreateWithImageInRect(cg, CGRectMake(w / 4.0, h / 4.0, w / 2.0, h / 2.0));
+    if (!crop) { cached = full; return cached; }
+    cached = [UIImage imageWithCGImage:crop scale:full.scale orientation:full.imageOrientation];
+    CGImageRelease(crop);
+    return cached;
+}
 
 @implementation ZUSSettingsController
 
@@ -2675,6 +2807,19 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
     // 1.3.5: thanh tab DƯỚI đáy theo mẫu cinematic đã duyệt: icon kính +
     // nhãn dưới, tab đang chọn sáng viền accent.
     UIView *bar = [[UIView alloc] initWithFrame:CGRectZero];
+    // 1.3.9: kính mờ THẬT (blur) sau thanh tab — zu_applyTheme bật/tắt
+    // theo bộ màu. Blur gắn vào bar TRƯỚC khi kích hoạt ràng buộc của nó
+    // (đúng thứ tự addSubview → activateConstraints).
+    UIVisualEffectView *barBlur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
+    barBlur.tag = 43;
+    barBlur.translatesAutoresizingMaskIntoConstraints = NO;
+    [bar addSubview:barBlur];
+    [NSLayoutConstraint activateConstraints:@[
+        [barBlur.topAnchor constraintEqualToAnchor:bar.topAnchor],
+        [barBlur.bottomAnchor constraintEqualToAnchor:bar.bottomAnchor],
+        [barBlur.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor],
+        [barBlur.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor],
+    ]];
     bar.translatesAutoresizingMaskIntoConstraints = NO;
     NSArray *titles = @[@"Tổng quan", @"Riêng tư", @"Dữ liệu", @"Cá nhân hoá"];
     NSArray *icons = @[@"tab0", @"tab1", @"tab2", @"tab3"];
@@ -2686,8 +2831,8 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         b.translatesAutoresizingMaskIntoConstraints = NO;
         UIImageView *iv = [[UIImageView alloc] initWithImage:ZUSAssetImage(icons[(NSUInteger)i])];
         iv.tag = 41;
-        iv.contentMode = UIViewContentModeScaleAspectFill;
-        iv.clipsToBounds = YES;
+        iv.contentMode = UIViewContentModeScaleAspectFit;
+        iv.clipsToBounds = NO;
         iv.layer.cornerRadius = 9;
         iv.translatesAutoresizingMaskIntoConstraints = NO;
         [b addSubview:iv];
@@ -2729,6 +2874,11 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
     tv.dataSource = self;
     tv.delegate = self;
     tv.backgroundColor = [UIColor clearColor];
+    // 1.4.0: chiều cao dòng TỰ GIÃN theo nội dung — tiêu đề dài thì
+    // xuống dòng, dòng cao thêm, không ô nào bị lọt/tràn khung. Ghim rõ
+    // rowHeight + estimatedRowHeight để cơ chế tự giãn chạy chắc.
+    tv.rowHeight = UITableViewAutomaticDimension;
+    tv.estimatedRowHeight = 64;
     [self.view addSubview:tv];
     self.zusTV = tv;
     [NSLayoutConstraint activateConstraints:@[
@@ -2780,7 +2930,8 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
     BOOL cine = [t[@"preset"] intValue] == 0;
     self.zusBgView.hidden = !cine;
     self.view.backgroundColor = cine ? [UIColor colorWithRed:0.02 green:0.03 blue:0.08 alpha:1.0] : t[@"bg"];
-    self.zusTabBar.backgroundColor = cine ? [UIColor colorWithWhite:0.0 alpha:0.35] : t[@"bg"];
+    self.zusTabBar.backgroundColor = cine ? [UIColor colorWithWhite:0.0 alpha:0.15] : t[@"bg"];
+    [self.zusTabBar viewWithTag:43].hidden = !cine;
     self.zusTV.backgroundColor = [UIColor clearColor];
     self.zusTV.separatorColor = cine ? [UIColor colorWithWhite:1.0 alpha:0.10] : [UIColor separatorColor];
     for (UIButton *b in self.zusTabBtns) {
@@ -2789,6 +2940,11 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         UILabel *lb = (UILabel *)[b viewWithTag:42];
         iv.layer.borderWidth = sel ? 1.5 : 0.0;
         iv.layer.borderColor = ((UIColor *)t[@"accent"]).CGColor;
+        // 1.4.0: tab đang chọn phát sáng neon quanh icon (mạnh hơn).
+        iv.layer.shadowColor = ((UIColor *)t[@"accent"]).CGColor;
+        iv.layer.shadowRadius = (cine && sel) ? 11 : 0;
+        iv.layer.shadowOpacity = (cine && sel) ? 0.95 : 0.0;
+        iv.layer.shadowOffset = CGSizeZero;
         iv.alpha = sel ? 1.0 : 0.55;
         lb.textColor = sel ? t[@"accent"] : [t[@"text"] colorWithAlphaComponent:0.55];
     }
@@ -2796,6 +2952,66 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
     nb.barTintColor = t[@"bar"];
     nb.tintColor = t[@"accent"];
     nb.titleTextAttributes = @{NSForegroundColorAttributeName: t[@"barText"]};
+    [self zu_updateTabHeader];
+}
+
+// 1.4.0: đầu trang lớn ở đầu 3 tab Riêng tư / Dữ liệu / Cá nhân hoá
+// theo mẫu xem trước anh duyệt: icon tab 68pt phát sáng neon + tiêu đề
+// lớn (Riêng tư có thêm dòng phụ). Tab Tổng quan dùng ô hero sẵn có nên
+// không gắn đầu trang. Dựng bằng FRAME (không ràng buộc — tránh hẳn lỗi
+// thứ tự addSubview/activateConstraints của 1.3.5) và dựng lại khi bề
+// rộng bảng đổi qua viewDidLayoutSubviews.
+- (void)zu_updateTabHeader {
+    if (!self.zusTV) return;
+    NSDictionary *t = self.zusTheme ?: ZUSTheme();
+    NSInteger tab = self.zusTab;
+    if (tab <= 0 || tab > 3) {
+        if (self.zusTV.tableHeaderView) self.zusTV.tableHeaderView = nil;
+        self.zusTabHeader = nil;
+        return;
+    }
+    NSArray *cfgs = @[ @[@"tab1", @"Riêng tư", @"ZUS · Bảng điều khiển quyền riêng tư"],
+                       @[@"tab2", @"Dữ liệu", @""],
+                       @[@"tab3", @"Cá nhân hoá", @""] ];
+    NSArray *cfg = cfgs[(NSUInteger)(tab - 1)];
+    CGFloat w = self.zusTV.bounds.size.width;
+    if (w < 10) w = self.view.bounds.size.width;
+    if (w < 10) w = 390;
+    BOOL cine = [t[@"preset"] intValue] == 0;
+    UIView *hv = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 96)];
+    UIImageView *iv = [[UIImageView alloc] initWithImage:ZUSAssetImage(cfg[0])];
+    iv.frame = CGRectMake(32, 14, 68, 68);
+    iv.contentMode = UIViewContentModeScaleAspectFit;
+    iv.layer.shadowColor = ((UIColor *)t[@"accent"]).CGColor;
+    iv.layer.shadowRadius = cine ? 13 : 0;
+    iv.layer.shadowOpacity = cine ? 0.95 : 0.0;
+    iv.layer.shadowOffset = CGSizeZero;
+    [hv addSubview:iv];
+    BOOL hasSub = [cfg[2] length] > 0;
+    UILabel *ttl = [[UILabel alloc] initWithFrame:CGRectMake(116, hasSub ? 20 : 30, w - 132, 38)];
+    ttl.text = cfg[1];
+    ttl.font = [UIFont systemFontOfSize:29 weight:UIFontWeightBold];
+    ttl.textColor = t[@"text"];
+    [hv addSubview:ttl];
+    if (hasSub) {
+        UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(116, 58, w - 132, 20)];
+        sub.text = cfg[2];
+        sub.font = [UIFont systemFontOfSize:13.5];
+        sub.textColor = [t[@"text"] colorWithAlphaComponent:0.7];
+        [hv addSubview:sub];
+    }
+    self.zusTV.tableHeaderView = hv;
+    self.zusTabHeader = hv;
+    self.zusTabHeaderW = w;
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    if (self.zusTabHeader) {
+        CGFloat w = self.zusTV.bounds.size.width;
+        CGFloat diff = w - self.zusTabHeaderW;
+        if (diff > 1.0 || diff < -1.0) [self zu_updateTabHeader];
+    }
 }
 
 - (void)zu_refresh {
@@ -2846,7 +3062,7 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         [secs addObject:@{@"header": @"Nhật ký chặn hôm nay — theo đoạn chat", @"rows": jrows}];
     } else if (self.zusTab == 1) {
         [secs addObject:@{@"header": @"Công tắc chính", @"rows": @[
-            @{@"kind": @"switch", @"title": @"Bật ZUS", @"key": ZUS_KEY_ENABLED, @"def": @YES, @"icon": @"orb"},
+            @{@"kind": @"switch", @"title": @"Bật ZUS", @"key": ZUS_KEY_ENABLED, @"def": @YES, @"icon": @"shield"},
             @{@"kind": @"switch", @"title": @"Chặn “đã xem” khi đọc tin", @"key": ZUS_KEY_UNSEEN, @"def": @YES, @"icon": @"eye"},
             @{@"kind": @"switch", @"title": @"Chặn “đã nhận”", @"key": ZUS_KEY_DELIVERED, @"def": @YES, @"icon": @"delivered"},
             @{@"kind": @"switch", @"title": @"Tắt “đang nhập...”", @"key": ZUS_KEY_TYPING, @"def": @YES, @"icon": @"typing"},
@@ -2871,11 +3087,11 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         [secs addObject:perSec];
         [secs addObject:@{@"header": @"Chặn theo giờ", @"footer": @"Mặc định TẮT — chỉ khi anh chủ động bật và tự đặt giờ mới có tác dụng. Ngoài khung giờ, các chặn đã-xem / đang-nhập / đã-nhận nằm im; chống thu hồi không bị lịch chi phối.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Bật chặn theo giờ", @"key": ZUS_KEY_SCHED, @"def": @NO, @"icon": @"clock"},
-            @{@"kind": @"time", @"title": @"Từ giờ", @"minkey": ZUS_KEY_SCHEDFROM, @"mindef": @(22 * 60)},
-            @{@"kind": @"time", @"title": @"Đến giờ", @"minkey": ZUS_KEY_SCHEDTO, @"mindef": @(7 * 60)},
+            @{@"kind": @"time", @"title": @"Từ giờ", @"minkey": ZUS_KEY_SCHEDFROM, @"mindef": @(22 * 60), @"icon": @"sunrise"},
+            @{@"kind": @"time", @"title": @"Đến giờ", @"minkey": ZUS_KEY_SCHEDTO, @"mindef": @(7 * 60), @"icon": @"sunset"},
         ]}];
         [secs addObject:@{@"header": @"Cuộc gọi", @"footer": @"Chặn cuộc gọi theo từng người nằm trong mục cài riêng của đoạn chat đó (mở đoạn chat rồi mở lại bảng). Xác nhận trước khi gọi: ZUS hỏi lại một lần trước khi Zalo bắt đầu cuộc gọi đi, tránh bấm nhầm.", @"rows": @[
-            @{@"kind": @"switch", @"title": @"Xác nhận trước khi gọi", @"key": ZUS_KEY_CONFIRMCALL, @"def": @NO, @"icon": @"phone"},
+            @{@"kind": @"switch", @"title": @"Xác nhận trước khi gọi", @"key": ZUS_KEY_CONFIRMCALL, @"def": @NO, @"icon": @"phonecheck"},
         ]}];
         [secs addObject:@{@"header": @"Quảng cáo", @"footer": @"Vòng 2: ZUS móc đúng bộ xử lý danh sách chat bên trong Inbox, ô nào bị chỉ mặt là quảng cáo sẽ bị thu chiều cao về 0. Mọi lần chỉ mặt đều ghi vào ZUS.log — nếu giấu nhầm đoạn chat thật, tắt công tắc này là danh sách trở lại bình thường ngay.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Chặn quảng cáo trong danh sách chat", @"key": ZUS_KEY_ADBLOCK, @"def": @NO, @"icon": @"ads"},
@@ -2883,9 +3099,9 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
     } else if (self.zusTab == 2) {
         [secs addObject:@{@"header": @"Danh bạ", @"rows": @[
             @{@"kind": @"action", @"title": @"Sao lưu danh bạ Zalo", @"act": @"backup", @"icon": @"contacts"},
-            @{@"kind": @"action", @"title": @"Khôi phục danh bạ (đối chiếu)", @"act": @"restore", @"icon": @"backup"},
+            @{@"kind": @"action", @"title": @"Khôi phục danh bạ (đối chiếu)", @"act": @"restore", @"icon": @"restore"},
             @{@"kind": @"action", @"title": @"Kho tin đã thu hồi", @"act": @"vault", @"icon": @"vault"},
-            @{@"kind": @"action", @"title": @"Thay đổi bạn bè", @"act": @"friendchg", @"icon": @"contacts"},
+            @{@"kind": @"action", @"title": @"Thay đổi bạn bè", @"act": @"friendchg", @"icon": @"friendchg"},
         ]}];
         [secs addObject:@{@"header": @"Sao lưu tin nhắn & cuộc gọi", @"footer": @"Sao lưu đọc trực tiếp kho dữ liệu của Zalo trên máy (chỉ đọc — không ghi vào kho). Tin nhắn xuất ra .json + .txt dễ đọc; cuộc gọi ra .json + .csv. Backup toàn bộ gộp danh bạ + tin nhắn + cuộc gọi + hồ sơ ZUS vào một thư mục có ngày giờ.", @"rows": @[
             @{@"kind": @"action", @"title": @"Sao lưu tin nhắn", @"act": @"backupmsg", @"icon": @"chat"},
@@ -2893,8 +3109,8 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
             @{@"kind": @"action", @"title": @"Backup toàn bộ dữ liệu", @"act": @"backupall", @"icon": @"backup"},
         ]}];
         [secs addObject:@{@"header": @"Hồ sơ ZUS", @"rows": @[
-            @{@"kind": @"action", @"title": @"Xuất hồ sơ ZUS", @"act": @"export", @"icon": @"profile"},
-            @{@"kind": @"action", @"title": @"Nhập hồ sơ ZUS", @"act": @"import", @"icon": @"profile"},
+            @{@"kind": @"action", @"title": @"Xuất hồ sơ ZUS", @"act": @"export", @"icon": @"export"},
+            @{@"kind": @"action", @"title": @"Nhập hồ sơ ZUS", @"act": @"import", @"icon": @"import"},
         ]}];
         if (gLockedChats.count) {
             NSMutableArray *rows = [NSMutableArray array];
@@ -2918,14 +3134,14 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
             @{@"kind": @"color", @"title": @"Công tắc & nút", @"colkey": ZUS_KEY_COLACCENT, @"color": t[@"accent"]},
         ]}];
         [secs addObject:@{@"header": @"Tab của Zalo", @"footer": @"Mặc định KHÔNG ẩn tab nào — mỗi tab chỉ ẩn khi anh tự bật công tắc của nó. Đổi công tắc xong đóng bảng là Zalo áp dụng ngay.", @"rows": @[
-            @{@"kind": @"switch", @"title": @"Ẩn tab Khám phá", @"key": ZUS_KEY_HIDETABDISC, @"def": @NO, @"icon": @"tabs"},
-            @{@"kind": @"switch", @"title": @"Ẩn tab Nhật ký", @"key": ZUS_KEY_HIDETABTIME, @"def": @NO, @"icon": @"tabs"},
+            @{@"kind": @"switch", @"title": @"Ẩn tab Khám phá", @"key": ZUS_KEY_HIDETABDISC, @"def": @NO, @"icon": @"tab0"},
+            @{@"kind": @"switch", @"title": @"Ẩn tab Nhật ký", @"key": ZUS_KEY_HIDETABTIME, @"def": @NO, @"icon": @"tab0"},
         ]}];
         [secs addObject:@{@"header": @"Trong Zalo", @"rows": @[
-            @{@"kind": @"switch", @"title": @"Nút mở bảng trong màn hình chat", @"key": ZUS_KEY_INAPP, @"def": @YES, @"icon": @"inchat"},
-            @{@"kind": @"switch", @"title": @"Ấn giữ thanh tab mở bảng ZUS", @"key": ZUS_KEY_LONGTAB, @"def": @YES, @"icon": @"press"},
+            @{@"kind": @"switch", @"title": @"Nút mở bảng trong màn hình chat", @"key": ZUS_KEY_INAPP, @"def": @YES, @"icon": @"eyechat"},
+            @{@"kind": @"switch", @"title": @"Ấn giữ thanh tab mở bảng ZUS", @"key": ZUS_KEY_LONGTAB, @"def": @YES, @"icon": @"tab0"},
             @{@"kind": @"switch", @"title": @"Giữ màn hình sáng khi dùng Zalo", @"key": ZUS_KEY_AWAKE, @"def": @NO, @"icon": @"awake"},
-            @{@"kind": @"switch", @"title": @"Che nội dung khi thoát ra đa nhiệm", @"key": ZUS_KEY_SHIELD, @"def": @NO, @"icon": @"lock"},
+            @{@"kind": @"switch", @"title": @"Che nội dung khi thoát ra đa nhiệm", @"key": ZUS_KEY_SHIELD, @"def": @NO, @"icon": @"eyeoff"},
         ]}];
         [secs addObject:@{@"header": @"Khác", @"footer": @"Cảnh báo link đang ở mức dò: quét link trong tin nhắn, gặp link rút gọn hoặc tên miền nhái ngân hàng / ví / Zalo thì bật cảnh báo. Mọi link gặp được đều ghi vào ZUS.log để hiệu chỉnh.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Tải Story về máy", @"key": ZUS_KEY_STORYDL, @"def": @NO},
@@ -2934,18 +3150,19 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
             @{@"kind": @"switch", @"title": @"Thêm emoji react (thử nghiệm)", @"key": ZUS_KEY_MOREEMOJI, @"def": @NO},
         ]}];
         [secs addObject:@{@"header": @"Bản quyền", @"footer": @"Bản dùng thật: chưa nhập key hợp lệ thì mọi chức năng ZUS đều tắt — kể cả trang ZUS trong Cài đặt. Kích hoạt một lần, dùng theo thời hạn của key.", @"rows": @[
-            @{@"kind": @"info2", @"title": @"Trạng thái", @"detail": ZUSLicenseStatusText()},
-            @{@"kind": @"action", @"title": @"Mã máy — chạm để chép", @"act": @"copycode", @"icon": @"profile"},
+            @{@"kind": @"info2", @"title": @"Trạng thái", @"detail": ZUSLicenseStatusText(), @"icon": @"activity"},
+            @{@"kind": @"action", @"title": @"Mã máy — chạm để chép", @"act": @"copycode", @"icon": @"flask"},
             @{@"kind": @"action", @"title": @"Nhập key kích hoạt", @"act": @"activate", @"icon": @"key"},
         ]}];
         [secs addObject:@{@"header": @"Trạng thái", @"rows": @[
-            @{@"kind": @"action", @"title": @"Xem trạng thái dò", @"act": @"diag", @"icon": @"eye"},
+            @{@"kind": @"action", @"title": @"Xem trạng thái dò", @"act": @"diag", @"icon": @"activity"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.3.8 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.0 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
     self.zusSecs = secs;
+    [self zu_updateTabHeader];
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
@@ -3000,14 +3217,30 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         st.spacing = 10;
         st.translatesAutoresizingMaskIntoConstraints = NO;
         [cell.contentView addSubview:st];
-        UIImageView *orb = [[UIImageView alloc] initWithImage:ZUSAssetImage(@"orb")];
+        // 1.4.0: orb cắt giữa (chữ ZUS phủ đầy vòng) + quầng sáng accent
+        // phía sau — đĩa sáng nằm ở view đệm KHÔNG cắt (orb tự cắt tròn
+        // nên bóng phải đặt ở view cha mới tỏa ra ngoài được). Mọi
+        // addSubview đều đứng trước activateConstraints (bài học 1.3.8).
+        UIView *orbBox = [[UIView alloc] initWithFrame:CGRectZero];
+        orbBox.translatesAutoresizingMaskIntoConstraints = NO;
+        UIView *halo = [[UIView alloc] initWithFrame:CGRectZero];
+        halo.backgroundColor = [t[@"accent"] colorWithAlphaComponent:0.30];
+        halo.layer.cornerRadius = 59;
+        halo.layer.shadowColor = ((UIColor *)t[@"accent"]).CGColor;
+        halo.layer.shadowRadius = 18;
+        halo.layer.shadowOpacity = ([t[@"preset"] intValue] == 0) ? 0.55 : 0.0;
+        halo.layer.shadowOffset = CGSizeZero;
+        halo.translatesAutoresizingMaskIntoConstraints = NO;
+        [orbBox addSubview:halo];
+        UIImageView *orb = [[UIImageView alloc] initWithImage:ZUSOrbHeroImage()];
         orb.contentMode = UIViewContentModeScaleAspectFill;
         orb.clipsToBounds = YES;
         orb.layer.cornerRadius = 59;
         orb.layer.borderWidth = 1.5;
         orb.layer.borderColor = [t[@"accent"] colorWithAlphaComponent:0.65].CGColor;
         orb.translatesAutoresizingMaskIntoConstraints = NO;
-        [st addArrangedSubview:orb];
+        [orbBox addSubview:orb];
+        [st addArrangedSubview:orbBox];
         UILabel *tag = [[UILabel alloc] initWithFrame:CGRectZero];
         tag.text = @"Đọc tin nhắn không để lại dấu vết";
         tag.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
@@ -3032,8 +3265,16 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
             [st.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor constant:-14],
             [st.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:12],
             [st.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-12],
-            [orb.widthAnchor constraintEqualToConstant:118],
-            [orb.heightAnchor constraintEqualToConstant:118],
+            [orbBox.widthAnchor constraintEqualToConstant:118],
+            [orbBox.heightAnchor constraintEqualToConstant:118],
+            [halo.topAnchor constraintEqualToAnchor:orbBox.topAnchor],
+            [halo.bottomAnchor constraintEqualToAnchor:orbBox.bottomAnchor],
+            [halo.leadingAnchor constraintEqualToAnchor:orbBox.leadingAnchor],
+            [halo.trailingAnchor constraintEqualToAnchor:orbBox.trailingAnchor],
+            [orb.topAnchor constraintEqualToAnchor:orbBox.topAnchor],
+            [orb.bottomAnchor constraintEqualToAnchor:orbBox.bottomAnchor],
+            [orb.leadingAnchor constraintEqualToAnchor:orbBox.leadingAnchor],
+            [orb.trailingAnchor constraintEqualToAnchor:orbBox.trailingAnchor],
             [pl.topAnchor constraintEqualToAnchor:pill.topAnchor constant:6],
             [pl.bottomAnchor constraintEqualToAnchor:pill.bottomAnchor constant:-6],
             [pl.leadingAnchor constraintEqualToAnchor:pill.leadingAnchor constant:14],
@@ -3065,6 +3306,11 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
             col.spacing = 4;
             UIImageView *iv = [[UIImageView alloc] initWithImage:ZUSAssetImage(c[0])];
             iv.contentMode = UIViewContentModeScaleAspectFit;
+            // 1.4.0: icon thống kê phát sáng MẠNH ở bộ Cinematic
+            iv.layer.shadowColor = ((UIColor *)t[@"accent"]).CGColor;
+            iv.layer.shadowRadius = 8;
+            iv.layer.shadowOpacity = ([t[@"preset"] intValue] == 0) ? 0.95 : 0.0;
+            iv.layer.shadowOffset = CGSizeZero;
             iv.translatesAutoresizingMaskIntoConstraints = NO;
             UILabel *cap = [[UILabel alloc] initWithFrame:CGRectZero];
             cap.text = c[1];
@@ -3166,6 +3412,18 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
     if (row[@"icon"]) {
         UIImage *im = ZUSAssetImage(row[@"icon"]);
         if (im) cell.imageView.image = im;
+        // 1.4.0: icon neon phát sáng MẠNH ở bộ màu Cinematic (ô tái dùng
+        // phải tắt bóng khi không thuộc bộ màu này).
+        if (im && [self.zusTheme[@"preset"] intValue] == 0) {
+            cell.imageView.layer.shadowColor = ((UIColor *)self.zusTheme[@"accent"]).CGColor;
+            cell.imageView.layer.shadowRadius = 8;
+            cell.imageView.layer.shadowOpacity = 0.95;
+            cell.imageView.layer.shadowOffset = CGSizeZero;
+        } else {
+            cell.imageView.layer.shadowOpacity = 0;
+        }
+    } else {
+        cell.imageView.layer.shadowOpacity = 0;
     }
     if ([kind isEqualToString:@"switch"] || [kind isEqualToString:@"lockswitch"] || [kind isEqualToString:@"locklist"]) {
         UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectZero];
@@ -3209,6 +3467,13 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     } else if ([kind isEqualToString:@"radio"]) {
+        // 1.3.9: chấm màu theo đúng màu nhấn của từng bộ màu.
+        int pv = [row[@"preset"] intValue];
+        UIColor *swc = pv == 0 ? [UIColor colorWithRed:0.38 green:0.56 blue:1.0 alpha:1.0]
+                     : pv == 1 ? [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0]
+                     : pv == 2 ? [UIColor colorWithRed:0.0 green:0.41 blue:1.0 alpha:1.0]
+                     : ZUSColorFromHex(ZUSReadString(ZUS_KEY_COLACCENT), [UIColor systemBlueColor]);
+        cell.imageView.image = ZUSSwatchImage(swc);
         int cur = [self.zusSecs[(NSUInteger)indexPath.section][@"mark"] intValue];
         cell.accessoryType = ([row[@"preset"] intValue] == cur) ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
         cell.selectionStyle = UITableViewCellSelectionStyleDefault;
@@ -5756,7 +6021,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.3.8 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.4.0 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
