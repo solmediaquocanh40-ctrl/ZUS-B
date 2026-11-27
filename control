@@ -1,6 +1,6 @@
 Package: com.anhdang.zalounseen
 Name: ZUS
-Version: 1.4.2
+Version: 1.4.3
 Architecture: iphoneos-arm
 Description: Đọc tin nhắn Zalo "tàng hình" — bên kia không thấy đã xem, danh sách chat vẫn in đậm như chưa đọc.
  ZUS là tweak dành cho Zalo trên máy đã jailbreak, giúp bạn đọc tin nhắn theo cách riêng tư nhất: người gửi không hề biết bạn đã đọc.

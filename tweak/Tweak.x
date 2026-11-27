@@ -1,4 +1,22 @@
-// ZUS 1.4.2 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.4.3 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+//
+// 1.4.3 — DÒ ĐƯỜNG THỨ BA + HẾT TRÙNG ICON (anh chốt gộp 2026-11-27,
+// dựng trên bộ 1.4.2 — giữ nguyên toàn bộ code đang chuẩn của 1.4.2,
+// chỉ thêm/gán lại đúng hai phần này):
+// (1) Dò đường 3: log 1.4.2 chứng minh cập nhật "Đã nhận" của tin anh
+// gửi (sau 21:13:50) KHÔNG đi qua hai cửa trạng thái chuyên dụng —
+// các móc chung nay ghi thêm mọi lần CHO QUA thuộc nhóm đã-xem (1) và
+// đã-nhận (3), trần 400 dòng/phiên, tiền tố "dò đường 3 #…" (lần chặn
+// đã có dòng ĐÃ CHẶN riêng). CHỈ ghi log — không đổi bất kỳ quyết
+// định chặn/cho qua nào. Bài test: mở Zalo, gửi đúng 1 tin, ghi giờ
+// PC nhảy "Đã nhận" → đối chiếu cửa nào động đậy quanh mốc đó.
+// (2) Hết trùng icon (rà cơ học 1.4.2: 34 dòng chỉ có 29 icon): thêm
+// 4 icon mới vẽ theo đúng phong cách neon của bộ 1.3.9 — 'log' (trang
+// giấy) cho Xem nhật ký, 'warn' (tam giác cảnh báo) cho Báo cáo lỗi,
+// 'info' (chữ i trong vòng tròn) cho dòng Trạng thái bản quyền,
+// 'tabhide' (tab có mắt gạch chéo) cho hai công tắc Ẩn tab (cùng một
+// chức năng ẩn tab nên dùng chung có chủ đích). Sau gán lại: 34 dòng
+// / 33 icon, mỗi icon chỉ còn đúng 1 dòng trừ tabhide.
 //
 // 1.4.2 — LÀM CẢ HAI PHƯƠNG ÁN A + B cho vụ "Đã nhận" (anh chốt
 // 2026-11-27, dựng trên bộ 1.4.1 mới nhất): cửa trạng thái Inbox 5 tham
@@ -1135,6 +1153,28 @@ static NSString *ZUSCatLabel(int cat) {
     }
 }
 
+// 1.4.3 — dò đường thứ ba: vụ "Đã nhận" của tin MÌNH GỬI không đi qua
+// hai cửa trạng thái chuyên dụng (log 1.4.2 chứng minh: các lần gửi sau
+// 21:13:50 chỉ thấy status=2 ở hai cửa đó, không status=3 nào tới dù PC
+// hiện Đã nhận). Vòng này ghi thêm các lần CHO QUA thuộc hai nhóm
+// đã-xem (1) và đã-nhận (3) ở mọi móc chung — lần chặn đã có dòng "ĐÃ
+// CHẶN" riêng — để đối chiếu quanh mốc anh gửi 1 tin kiểm chứng: cửa
+// nào thuộc hai nhóm này động đậy quanh lúc PC nhảy "Đã nhận" sẽ lộ
+// diện. Trần 400 dòng/phiên chống ngập log; ZUSLog tự gác khi tắt log
+// gỡ lỗi. CHỈ ghi log, không đổi bất kỳ quyết định chặn/cho qua nào.
+static int gZUSProbePass = 0;
+static BOOL gZUSProbeFull = NO;
+static void ZUSProbePass(__unsafe_unretained id self, SEL _cmd, int cat) {
+    if (cat != 1 && cat != 3) return;
+    if (gZUSProbePass < 400) {
+        gZUSProbePass++;
+        ZUSLog(@"dò đường 3 #%d [nhóm %@] %@.%@ -> cho qua", gZUSProbePass, ZUSCatLabel(cat), NSStringFromClass(object_getClass(self)), NSStringFromSelector(_cmd));
+    } else if (!gZUSProbeFull) {
+        gZUSProbeFull = YES;
+        ZUSLog(@"dò đường 3: đã đủ 400 dòng cho-qua — ngừng ghi tới hết phiên");
+    }
+}
+
 // Hàm thay thế chung cho các hàm tối đa 2 tham số: bật tính năng thì chặn
 // (không chạy gốc, trả 0), tắt thì chạy gốc và trả NGUYÊN giá trị gốc.
 // Từ 1.0.6 mọi hàm thay thế trả long long: hàm đích trả số nguyên/BOOL/con trỏ
@@ -1156,6 +1196,7 @@ static long long ZUSGenericHook(__unsafe_unretained id self, SEL _cmd, __unsafe_
     void *a2Raw = (__bridge void *)a2;
     BOOL active = (cat == 3) ? ZUSActiveDelivered(((uintptr_t)a2Raw & 0xFF) != 0) : ZUSActiveForCall(cat, self);
     if (active) { ZUSNoteBlocked(self, _cmd, cat); return 0; }
+    ZUSProbePass(self, _cmd, cat);
     if (orig) return ((long long (*)(__unsafe_unretained id, SEL, __unsafe_unretained id, __unsafe_unretained id))orig)(self, _cmd, a1, a2);
     return 0;
 }
@@ -1170,6 +1211,7 @@ static long long ZUSHook5(__unsafe_unretained id self, SEL _cmd, void *a1, void 
     ZUSNoteCalledOnce(self, _cmd, key);
     BOOL active = ZUSActiveForCall(cat, self);
     if (active) { ZUSNoteBlocked(self, _cmd, cat); return 0; }
+    ZUSProbePass(self, _cmd, cat);
     if (orig) return ((long long (*)(__unsafe_unretained id, SEL, void *, void *, void *, void *, void *))orig)(self, _cmd, a1, a2, a3, a4, a5);
     return 0;
 }
@@ -1181,6 +1223,7 @@ static long long ZUSHook3(__unsafe_unretained id self, SEL _cmd, void *a1, void 
     ZUSNoteCalledOnce(self, _cmd, key);
     BOOL active = (cat == 3) ? ZUSActiveDelivered(((uintptr_t)a2 & 0xFF) != 0) : ZUSActiveForCall(cat, self);
     if (active) { ZUSNoteBlocked(self, _cmd, cat); return 0; }
+    ZUSProbePass(self, _cmd, cat);
     if (orig) return ((long long (*)(__unsafe_unretained id, SEL, void *, void *, void *))orig)(self, _cmd, a1, a2, a3);
     return 0;
 }
@@ -1192,6 +1235,7 @@ static long long ZUSHook4(__unsafe_unretained id self, SEL _cmd, void *a1, void 
     ZUSNoteCalledOnce(self, _cmd, key);
     BOOL active = ZUSActiveForCall(cat, self);
     if (active) { ZUSNoteBlocked(self, _cmd, cat); return 0; }
+    ZUSProbePass(self, _cmd, cat);
     if (orig) return ((long long (*)(__unsafe_unretained id, SEL, void *, void *, void *, void *))orig)(self, _cmd, a1, a2, a3, a4);
     return 0;
 }
@@ -1207,6 +1251,7 @@ static long long ZUSHook6(__unsafe_unretained id self, SEL _cmd, void *a1, void 
     ZUSNoteCalledOnce(self, _cmd, key);
     BOOL active = ZUSActiveForCall(cat, self);
     if (active) { ZUSNoteBlocked(self, _cmd, cat); return 0; }
+    ZUSProbePass(self, _cmd, cat);
     if (orig) return ((long long (*)(__unsafe_unretained id, SEL, void *, void *, void *, void *, void *, void *))orig)(self, _cmd, a1, a2, a3, a4, a5, a6);
     return 0;
 }
@@ -2650,7 +2695,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.4.2";
+    prof[@"_version"] = @"1.4.3";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -3344,8 +3389,8 @@ static UIImage *ZUSOrbHeroImage(void) {
             @{@"kind": @"color", @"title": @"Công tắc & nút", @"colkey": ZUS_KEY_COLACCENT, @"color": t[@"accent"]},
         ]}];
         [secs addObject:@{@"header": @"Tab của Zalo", @"footer": @"Mặc định KHÔNG ẩn tab nào — mỗi tab chỉ ẩn khi anh tự bật công tắc của nó. Đổi công tắc xong đóng bảng là Zalo áp dụng ngay.", @"rows": @[
-            @{@"kind": @"switch", @"title": @"Ẩn tab Khám phá", @"key": ZUS_KEY_HIDETABDISC, @"def": @NO, @"icon": @"tab0"},
-            @{@"kind": @"switch", @"title": @"Ẩn tab Nhật ký", @"key": ZUS_KEY_HIDETABTIME, @"def": @NO, @"icon": @"tab0"},
+            @{@"kind": @"switch", @"title": @"Ẩn tab Khám phá", @"key": ZUS_KEY_HIDETABDISC, @"def": @NO, @"icon": @"tabhide"},
+            @{@"kind": @"switch", @"title": @"Ẩn tab Nhật ký", @"key": ZUS_KEY_HIDETABTIME, @"def": @NO, @"icon": @"tabhide"},
         ]}];
         [secs addObject:@{@"header": @"Trong Zalo", @"rows": @[
             @{@"kind": @"switch", @"title": @"Nút mở bảng trong màn hình chat", @"key": ZUS_KEY_INAPP, @"def": @YES, @"icon": @"eyechat"},
@@ -3360,16 +3405,16 @@ static UIImage *ZUSOrbHeroImage(void) {
             @{@"kind": @"switch", @"title": @"Thêm emoji react (thử nghiệm)", @"key": ZUS_KEY_MOREEMOJI, @"def": @NO},
         ]}];
         [secs addObject:@{@"header": @"Bản quyền", @"footer": @"Bản dùng thật: chưa nhập key hợp lệ thì mọi chức năng ZUS đều tắt — kể cả trang ZUS trong Cài đặt. Kích hoạt một lần, dùng theo thời hạn của key.", @"rows": @[
-            @{@"kind": @"info2", @"title": @"Trạng thái", @"detail": ZUSLicenseStatusText(), @"icon": @"activity"},
+            @{@"kind": @"info2", @"title": @"Trạng thái", @"detail": ZUSLicenseStatusText(), @"icon": @"info"},
             @{@"kind": @"action", @"title": @"Mã máy — chạm để chép", @"act": @"copycode", @"icon": @"flask"},
             @{@"kind": @"action", @"title": @"Nhập key kích hoạt", @"act": @"activate", @"icon": @"key"},
         ]}];
         [secs addObject:@{@"header": @"Trạng thái", @"rows": @[
             @{@"kind": @"action", @"title": @"Xem trạng thái dò", @"act": @"diag", @"icon": @"activity"},
-            @{@"kind": @"action", @"title": @"Xem nhật ký", @"act": @"logview", @"icon": @"activity"},
-            @{@"kind": @"action", @"title": @"Báo cáo lỗi (.ips)", @"act": @"crashlist", @"icon": @"export"},
+            @{@"kind": @"action", @"title": @"Xem nhật ký", @"act": @"logview", @"icon": @"log"},
+            @{@"kind": @"action", @"title": @"Báo cáo lỗi (.ips)", @"act": @"crashlist", @"icon": @"warn"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.2 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.3 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -6245,7 +6290,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.4.2 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.4.3 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
