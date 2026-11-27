@@ -1,4 +1,22 @@
-// ZUS 1.4.7 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.4.8 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+//
+// 1.4.8 — GÓI SỬA GIAO DIỆN + CHẨN ĐOÁN THEME (anh chốt 2026-11-28,
+// giữ nguyên bộ code chuẩn 1.4.7): (1) THANH TRẠNG THÁI THEO THEME
+// — bảng nay khai preferredStatusBarStyle theo độ sáng nền theme
+// (tối → chữ trắng, sáng → chữ đen) và trình bày toàn màn hình +
+// nắm quyền trạng thái; trước đây bảng không khai gì nên chữ tối
+// chìm vào nền theme Tối như mất cả hàng. (2) TỰ CHỌN TỪNG PHẦN:
+// phần chưa từng lưu màu riêng được gieo bằng màu bộ đang xem —
+// chỉnh một phần không còn làm các phần khác nhảy về mặc định; lần
+// đầu vào bộ Tự chọn cũng gieo từ bộ đang xem. (3) ẨN TAB HẾT CHỚP
+// LÚC MỞ LẠNH: móc setViewControllers: của thanh tab chính, lọc
+// tab thừa TRƯỚC khi danh sách tới hàm gốc (đường áp cũ chỉ chạy
+// lúc nạp cài đặt + hẹn +9s/+26s nên tab hiện nguyên rồi mới ẩn).
+// (4) CHẨN ĐOÁN BỘ MÀU: anh báo "chạm bộ nào không đổi bộ đó" —
+// toàn bộ đường chạm → ghi → đọc lại → dựng lại đã rà từng mắt
+// xích đều thông trên code, log cũ lại không có dòng nào ở điểm
+// chạm; bản này gắn log tại điểm chạm (giá trị ghi + đọc lại +
+// preset thực áp) để một lần chạm của anh chỉ đích danh mắt gãy.
 //
 // 1.4.7 — XÁC NHẬN GỌI: GẮN CỔNG VÀO CỬA GỌI THẬT (anh chốt
 // 2026-11-27 sau test 1.4.5, giữ nguyên bộ code chuẩn 1.4.6 — chỉ
@@ -411,6 +429,7 @@ static void ZUSApplyTabHiding(void);
 // phần tính năng phía dưới) — thiếu là chết "undeclared function" (AGENTS #29).
 static void ZUSInstallCallBlock(void);
 static void ZUSInstallConfirmCall(void);
+static void ZUSInstallTabHideHook(void);
 static void ZUSInstallPhotoOriginal(void);
 static void ZUSInstallEmojiProbe(void);
 static void ZUSInstallAdDiscovery(void);
@@ -2900,7 +2919,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.4.7";
+    prof[@"_version"] = @"1.4.8";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -3413,6 +3432,24 @@ static UIImage *ZUSOrbHeroImage(void) {
     nb.tintColor = t[@"accent"];
     nb.titleTextAttributes = @{NSForegroundColorAttributeName: t[@"barText"]};
     [self zu_updateTabHeader];
+    // 1.4.8: chữ/số trên thanh trạng thái phải theo độ sáng của theme.
+    [self setNeedsStatusBarAppearanceUpdate];
+    [self.navigationController setNeedsStatusBarAppearanceUpdate];
+}
+
+// 1.4.8: trước bản này bảng KHÔNG hề khai kiểu thanh trạng thái nên
+// chữ/số giữ màu tối của hệ thống; gặp theme Tối (nền xanh đen phủ lên
+// tận vùng trạng thái) là chữ tối chìm vào nền tối — cả hàng trạng
+// thái "biến mất" như anh báo. Nay: nền theme tối → chữ trắng, nền
+// sáng → chữ đen, tính từ chính màu nền của theme đang áp.
+- (UIStatusBarStyle)preferredStatusBarStyle {
+    NSDictionary *t = self.zusTheme ?: ZUSTheme();
+    UIColor *bg = ([t[@"preset"] intValue] == 0)
+        ? [UIColor colorWithRed:0.02 green:0.03 blue:0.08 alpha:1.0] : t[@"bg"];
+    CGFloat r = 0, g = 0, b = 0, a = 0;
+    [bg getRed:&r green:&g blue:&b alpha:&a];
+    CGFloat lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    return lum > 0.6 ? UIStatusBarStyleDarkContent : UIStatusBarStyleLightContent;
 }
 
 // 1.4.0: đầu trang lớn ở đầu 3 tab Riêng tư / Dữ liệu / Cá nhân hoá
@@ -3619,7 +3656,7 @@ static UIImage *ZUSOrbHeroImage(void) {
             @{@"kind": @"action", @"title": @"Xem nhật ký", @"act": @"logview", @"icon": @"log"},
             @{@"kind": @"action", @"title": @"Báo cáo lỗi (.ips)", @"act": @"crashlist", @"icon": @"warn"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.7 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.8 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -4049,9 +4086,25 @@ static UIImage *ZUSOrbHeroImage(void) {
         };
         [self.navigationController pushViewController:tp animated:YES];
     } else if ([kind isEqualToString:@"radio"]) {
+        // 1.4.8: lần đầu vào bộ Tự chọn mà chưa từng lưu màu riêng thì
+        // gieo cả 4 phần bằng màu bộ đang xem — vào Tự chọn không làm
+        // bảng nhảy màu.
+        if ([row[@"preset"] intValue] == 3 && !ZUSReadObject(ZUS_KEY_COLBG) && !ZUSReadObject(ZUS_KEY_COLBAR) && !ZUSReadObject(ZUS_KEY_COLTEXT) && !ZUSReadObject(ZUS_KEY_COLACCENT)) {
+            NSDictionary *curT = self.zusTheme ?: ZUSTheme();
+            ZUSWriteSharedValue(ZUS_KEY_COLBG, ZUSHexFromColor(curT[@"bg"]));
+            ZUSWriteSharedValue(ZUS_KEY_COLBAR, ZUSHexFromColor(curT[@"bar"]));
+            ZUSWriteSharedValue(ZUS_KEY_COLTEXT, ZUSHexFromColor(curT[@"text"]));
+            ZUSWriteSharedValue(ZUS_KEY_COLACCENT, ZUSHexFromColor(curT[@"accent"]));
+        }
         ZUSWriteSharedValue(ZUS_KEY_THEME, row[@"preset"]);
         CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), ZUS_NOTIFY, NULL, NULL, true);
         [self zu_refresh];
+        // 1.4.8 chẩn đoán (anh báo chạm bộ nào không đổi bộ đó, log cũ
+        // không có dòng nào ở điểm chạm): ghi giá trị vừa ghi + đọc lại
+        // sau khi áp + preset mà theme của bảng đang giữ — một lần chạm
+        // của anh chỉ đích danh mắt xích gãy.
+        ZUSLog(@"theme: anh chạm bộ màu '%@' (preset %@) — đọc lại sau khi áp: preset=%d, theme bảng đang giữ preset=%@",
+               row[@"title"], row[@"preset"], ZUSReadInt(ZUS_KEY_THEME, -1), self.zusTheme[@"preset"]);
     } else if ([kind isEqualToString:@"color"]) {
         self.zusColorKey = row[@"colkey"];
         UIColorPickerViewController *cp = [[UIColorPickerViewController alloc] init];
@@ -4064,9 +4117,20 @@ static UIImage *ZUSOrbHeroImage(void) {
 
 - (void)colorPickerViewControllerDidFinish:(UIColorPickerViewController *)viewController {
     if (!self.zusColorKey) return;
+    // 1.4.8: phần nào CHƯA từng lưu màu riêng thì gieo bằng màu của bộ
+    // đang xem trước khi chuyển sang Tự chọn — chỉnh một phần không
+    // còn làm ba phần còn lại nhảy về mặc định.
+    NSDictionary *curT = self.zusTheme ?: ZUSTheme();
+    NSArray *pairs = @[ @[ZUS_KEY_COLBG, @"bg"], @[ZUS_KEY_COLBAR, @"bar"], @[ZUS_KEY_COLTEXT, @"text"], @[ZUS_KEY_COLACCENT, @"accent"] ];
+    for (NSArray *pr in pairs) {
+        if ([pr[0] isEqualToString:self.zusColorKey]) continue;
+        if (!ZUSReadObject(pr[0])) ZUSWriteSharedValue(pr[0], ZUSHexFromColor(curT[pr[1]]));
+    }
     ZUSWriteSharedValue(self.zusColorKey, ZUSHexFromColor(viewController.selectedColor));
     ZUSWriteSharedValue(ZUS_KEY_THEME, @3);
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), ZUS_NOTIFY, NULL, NULL, true);
+    ZUSLog(@"theme: anh chọn màu cho %@ = %@ — đọc lại sau khi áp: preset=%d",
+           self.zusColorKey, ZUSHexFromColor(viewController.selectedColor), ZUSReadInt(ZUS_KEY_THEME, -1));
     self.zusColorKey = nil;
     [self zu_refresh];
 }
@@ -4472,6 +4536,12 @@ static void ZUSPresentPanel(UIViewController *vc, NSString *via) {
         host = walk;
         ZUSSettingsController *panel = [[ZUSSettingsController alloc] init];
         UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:panel];
+        // 1.4.8: bảng chiếm trọn màn hình và NẮM quyền hiển thị thanh
+        // trạng thái — thiếu hai dòng này thì preferredStatusBarStyle
+        // của bảng (chữ trắng/đen theo theme) không có hiệu lực, vì
+        // dạng trình bày mặc định để quyền đó cho màn hình phía sau.
+        nav.modalPresentationStyle = UIModalPresentationFullScreen;
+        nav.modalPresentationCapturesStatusBarAppearance = YES;
         [host presentViewController:nav animated:YES completion:nil];
         ZUSLog(@"bảng ZUS: %@ — đã gọi hiện bảng từ %@", via, NSStringFromClass([host class]));
     } @catch (NSException *e) { ZUSLog(@"bảng ZUS: %@ — lỗi hiện bảng: %@", via, e.name); }
@@ -4918,6 +4988,27 @@ static __weak UITabBarController *gZUSTabCtl = nil;
 static NSArray *gZUSTabOrigVCs = nil;
 static NSString *gZUSTabAppliedState = nil;
 
+// 1.4.8: phép lọc tab tách thành hàm dùng chung — bản cũ nằm lồng
+// trong ZUSApplyTabHiding; nay móc gán-tab (bên dưới) cũng dùng để
+// hai đường lọc không bao giờ lệch nhau.
+static BOOL ZUSTabVCHidden(UIViewController *vc) {
+    UIViewController *top = vc;
+    if ([vc isKindOfClass:[UINavigationController class]]) top = ((UINavigationController *)vc).topViewController ?: vc;
+    NSString *cn = [NSString stringWithFormat:@"%@ %@", NSStringFromClass([vc class]), NSStringFromClass([top class])];
+    return (gHideTabDiscover && [cn containsString:@"Discover"]) ||
+           (gHideTabTimeline && [cn containsString:@"Timeline"]);
+}
+
+static NSArray *ZUSFilteredTabVCs(NSArray *vcs, int *hiddenOut) {
+    NSMutableArray *keep = [NSMutableArray array];
+    int hidden = 0;
+    for (UIViewController *vc in vcs) {
+        if (ZUSTabVCHidden(vc)) hidden++; else [keep addObject:vc];
+    }
+    if (hiddenOut) *hiddenOut = hidden;
+    return keep;
+}
+
 static void ZUSApplyTabHiding(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         @try {
@@ -4944,16 +5035,8 @@ static void ZUSApplyTabHiding(void) {
             if (!gZUSTabOrigVCs.count) return;
             NSString *state = [NSString stringWithFormat:@"d%d-t%d", gHideTabDiscover, gHideTabTimeline];
             if ([state isEqualToString:gZUSTabAppliedState] && tbc.viewControllers.count != gZUSTabOrigVCs.count) return;
-            NSMutableArray *keep = [NSMutableArray array];
             int hidden = 0;
-            for (UIViewController *vc in gZUSTabOrigVCs) {
-                UIViewController *top = vc;
-                if ([vc isKindOfClass:[UINavigationController class]]) top = ((UINavigationController *)vc).topViewController ?: vc;
-                NSString *cn = [NSString stringWithFormat:@"%@ %@", NSStringFromClass([vc class]), NSStringFromClass([top class])];
-                BOOL hide = (gHideTabDiscover && [cn containsString:@"Discover"]) ||
-                            (gHideTabTimeline && [cn containsString:@"Timeline"]);
-                if (hide) hidden++; else [keep addObject:vc];
-            }
+            NSArray *keep = ZUSFilteredTabVCs(gZUSTabOrigVCs, &hidden);
             if (hidden == 0) { gZUSTabAppliedState = state; return; }
             if (!keep.count) { ZUSLog(@"ẩn tab: KHÔNG áp dụng — lọc xong không còn tab nào"); return; }
             UIViewController *sel = tbc.selectedViewController;
@@ -4963,6 +5046,59 @@ static void ZUSApplyTabHiding(void) {
             ZUSLog(@"ẩn tab: đã ẩn %d tab (Khám phá=%d, Nhật ký=%d) — còn %lu tab", hidden, gHideTabDiscover, gHideTabTimeline, (unsigned long)keep.count);
         } @catch (NSException *e) { ZUSLog(@"ẩn tab: lỗi áp dụng: %@", e.name); }
     });
+}
+
+// 1.4.8: móc ngay lúc Zalo GÁN danh sách tab cho thanh tab chính —
+// lọc TRƯỚC khi danh sách tới tay hàm gốc, tab thừa không bao giờ
+// được hiển thị. Vá đúng lỗi anh báo: mở lạnh thì tab hiện nguyên
+// rồi mới ẩn, vì đường áp cũ chỉ chạy lúc nạp cài đặt (khi đó thanh
+// tab chưa dựng) và hai mốc hẹn +9s/+26s trong %ctor. Hai mốc hẹn
+// vẫn giữ làm lưới dự phòng; đường gạt công tắc trong app vẫn qua
+// ZUSApplyTabHiding như cũ. Nhận diện thanh tab chính: là root của
+// cửa sổ khoá, hoặc trong danh sách có VC dạng Connector (đặc trưng
+// các tab chính của Zalo).
+static void *gTabSetVCsOrig = NULL;
+
+static void ZUSTabSetVCsHook(__unsafe_unretained id self, SEL _cmd, NSArray *vcs) {
+    void *orig = gTabSetVCsOrig;
+    if (!orig) return;
+    if ((gHideTabDiscover || gHideTabTimeline) && [vcs isKindOfClass:[NSArray class]] && vcs.count) {
+        BOOL isMain = NO;
+        UIWindow *win = nil;
+        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+            for (UIWindow *w in ((UIWindowScene *)scene).windows) if (w.isKeyWindow) { win = w; break; }
+            if (win) break;
+        }
+        if (win.rootViewController == self) isMain = YES;
+        if (!isMain) {
+            for (UIViewController *vc in vcs) {
+                if ([NSStringFromClass([vc class]) containsString:@"Connector"]) { isMain = YES; break; }
+            }
+        }
+        if (isMain) {
+            int hidden = 0;
+            NSArray *keep = ZUSFilteredTabVCs(vcs, &hidden);
+            if (hidden > 0 && keep.count) {
+                gZUSTabCtl = (UITabBarController *)self;
+                gZUSTabOrigVCs = vcs;
+                gZUSTabAppliedState = [NSString stringWithFormat:@"d%d-t%d", gHideTabDiscover, gHideTabTimeline];
+                ZUSLog(@"ẩn tab: lọc ngay lúc Zalo gán tab (chưa kịp hiện) — ẩn %d, còn %lu", hidden, (unsigned long)keep.count);
+                ((void (*)(__unsafe_unretained id, SEL, NSArray *))orig)(self, _cmd, keep);
+                return;
+            }
+        }
+    }
+    ((void (*)(__unsafe_unretained id, SEL, NSArray *))orig)(self, _cmd, vcs);
+}
+
+static void ZUSInstallTabHideHook(void) {
+    static BOOL done = NO;
+    if (done) return;
+    done = YES;
+    if (!class_getInstanceMethod([UITabBarController class], @selector(setViewControllers:))) return;
+    MSHookMessageEx([UITabBarController class], @selector(setViewControllers:), (IMP)ZUSTabSetVCsHook, (IMP *)&gTabSetVCsOrig);
+    if (gTabSetVCsOrig) ZUSLog(@"ẩn tab: đã móc gán danh sách tab của thanh tab (lọc trước khi hiện)");
 }
 
 // ----- 1.1.5: cảnh báo link đáng ngờ (tính năng dò — ghi log mọi URL gặp
@@ -6717,13 +6853,14 @@ static void ZUSShowActivationPopup(void) {
                                         ZUS_NOTIFY, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
         ZUSInstallShieldObservers();
         ZUSInstallCaptureHooks();
+        ZUSInstallTabHideHook();
         // 1.3.4 Lite: máy yếu thì bỏ qua vòng dò link + quảng cáo khi hai
         // tính năng tương ứng đang tắt (bật giữa chừng sẽ lắp ở
         // ZUSPrefsChanged); máy mạnh giữ nguyên như cũ.
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.4.7 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.4.8 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];

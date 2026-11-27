@@ -1,4 +1,4 @@
-# ZUS 1.4.7 (gói com.anhdang.zalounseen)
+# ZUS 1.4.8 (gói com.anhdang.zalounseen)
 
 Tweak chích vào Zalo trên máy đã jailbreak: đọc tin nhắn mà bên kia không thấy
 "đã xem" — đoạn chat vẫn giữ chữ đậm như chưa đọc — kèm tắt "đang nhập...",
