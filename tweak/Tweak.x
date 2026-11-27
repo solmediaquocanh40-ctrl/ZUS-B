@@ -1,4 +1,16 @@
-// ZUS 1.4.9 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.4.10 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+//
+// 1.4.10 — NỀN CHÒM SAO DỊU LẠI + THẺ ĐẶC HƠN (anh chốt
+// phương án C 2026-11-28, giữ nguyên bộ code chuẩn 1.4.9):
+// anh nhìn kỹ thấy chòm sao của 12 cung như in đè lên nội
+// dung — rà code thì lớp nền nằm đúng dưới bảng, thủ phạm
+// là thẻ tối của 24 bộ trong suốt 92% (trắng alpha 0.08
+// như Cinematic) nên sao sáng xuyên thẻ giành sáng với
+// chữ. Bản này: (1) thẻ tối của 24 bộ đặc lên trắng alpha
+// 0.30; (2) chòm sao dịu đi — đường nối 45%→25%, lõi sao
+// trắng 92%→55%, quầng sao 22%→14%, sao điểm nền tối đa
+// 45%→30%, sao chính nhỏ lại (4.0→3.4). Bộ Cinematic và
+// mọi thứ ngoài vùng theme/nền zodiac giữ nguyên.
 //
 // 1.4.9 — 24 BỘ MÀU CON GIÁP + CUNG HOÀNG ĐẠO (anh chốt
 // 2026-11-28, giữ nguyên bộ code chuẩn 1.4.8 — chỉ đụng vùng
@@ -2932,7 +2944,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.4.9";
+    prof[@"_version"] = @"1.4.10";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -2996,8 +3008,9 @@ static UIColor *ZUSBlendColor(UIColor *a, UIColor *b, CGFloat frac) {
 // đạo (preset 16–27) — đúng bản minh hoạ anh duyệt 2026-11-28: mỗi
 // bộ một bộ 4 màu riêng (nền/thanh/chữ/nhấn) và một biểu tượng
 // riêng, không bộ nào trùng bộ nào. Bộ TỐI dùng thẻ kính mờ
-// (surface = trắng alpha 0.08 như Cinematic), bộ SÁNG dùng thẻ
-// trắng (như bộ Sáng). Con giáp theo bản Việt Nam (Mão = Mèo,
+// (surface = trắng alpha 0.30 — đặc hơn Cinematic từ 1.4.10),
+// bộ SÁNG dùng thẻ trắng (như bộ Sáng). Con giáp theo bản
+// Việt Nam (Mão = Mèo,
 // Mùi = Dê); cung hoàng đạo kèm khoảng ngày phổ thông.
 static NSDictionary *ZUSZodiacInfo(int preset) {
     static NSArray *infos = nil;
@@ -3079,7 +3092,9 @@ static NSDictionary *ZUSTheme(void) {
         UIColor *ztext = ZUSColorFromHex(zi[@"text"], [UIColor whiteColor]);
         UIColor *zacc = ZUSColorFromHex(zi[@"accent"], [UIColor systemBlueColor]);
         BOOL zlight = [zi[@"light"] boolValue];
-        UIColor *zsurface = zlight ? [UIColor whiteColor] : [UIColor colorWithWhite:1.0 alpha:0.08];
+        // 1.4.10 (phương án C của anh): thẻ tối đặc hơn Cinematic
+        // (0.08) để chòm sao không xuyên thẻ giành sáng với chữ.
+        UIColor *zsurface = zlight ? [UIColor whiteColor] : [UIColor colorWithWhite:1.0 alpha:0.30];
         return @{@"bg": zbg, @"bar": zbar, @"surface": zsurface, @"text": ztext, @"accent": zacc, @"barText": zlight ? ztext : [UIColor whiteColor], @"preset": @(preset)};
     }
     if (preset == 1) return @{@"bg": [UIColor colorWithRed:0.95 green:0.95 blue:0.97 alpha:1.0], @"bar": [UIColor whiteColor], @"surface": [UIColor whiteColor], @"text": [UIColor blackColor], @"accent": [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0], @"barText": [UIColor blackColor], @"preset": @1};
@@ -3169,7 +3184,7 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         seed = seed * 1103515245u + 12345u;
         CGFloat y = ((seed >> 16) % 1000) / 1000.0 * H;
         seed = seed * 1103515245u + 12345u;
-        CGFloat a = 0.10 + (((seed >> 16) % 100) / 100.0) * (self.zusLight ? 0.25 : 0.45);
+        CGFloat a = 0.10 + (((seed >> 16) % 100) / 100.0) * (self.zusLight ? 0.25 : 0.30);
         CGFloat r = (CGFloat)((seed >> 16) % 2) + 1.0;
         [[acc colorWithAlphaComponent:a] setFill];
         CGContextFillEllipseInRect(ctx, CGRectMake(x - r, y - r, r * 2, r * 2));
@@ -3190,7 +3205,7 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         NSArray *big = con[@"big"];
         CGFloat S = W * 0.94, ox = (W - S) / 2, oy = H * 0.09;
         CGContextSetLineWidth(ctx, 1.5);
-        [[acc colorWithAlphaComponent:0.45] setStroke];
+        [[acc colorWithAlphaComponent:0.25] setStroke];
         for (NSArray *ln in lns) {
             CGPoint p1 = [pts[(NSUInteger)[ln[0] intValue]] CGPointValue];
             CGPoint p2 = [pts[(NSUInteger)[ln[1] intValue]] CGPointValue];
@@ -3201,10 +3216,10 @@ static void ZUSSaveAvatarCover(UIViewController *fromVC);
         for (NSUInteger i = 0; i < pts.count; i++) {
             CGPoint p = [pts[i] CGPointValue];
             CGFloat cx = ox + p.x * S, cy = oy + p.y * S;
-            CGFloat r = [big containsObject:@(i)] ? 4.0 : 2.4;
-            [[acc colorWithAlphaComponent:0.22] setFill];
+            CGFloat r = [big containsObject:@(i)] ? 3.4 : 2.0;
+            [[acc colorWithAlphaComponent:0.14] setFill];
             CGContextFillEllipseInRect(ctx, CGRectMake(cx - r * 3, cy - r * 3, r * 6, r * 6));
-            [[UIColor colorWithWhite:1.0 alpha:0.92] setFill];
+            [[UIColor colorWithWhite:1.0 alpha:0.55] setFill];
             CGContextFillEllipseInRect(ctx, CGRectMake(cx - r, cy - r, r * 2, r * 2));
         }
     }
@@ -3888,7 +3903,7 @@ static UIImage *ZUSOrbHeroImage(void) {
             @{@"kind": @"action", @"title": @"Xem nhật ký", @"act": @"logview", @"icon": @"log"},
             @{@"kind": @"action", @"title": @"Báo cáo lỗi (.ips)", @"act": @"crashlist", @"icon": @"warn"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.9 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.10 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -7124,7 +7139,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.4.9 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.4.10 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
