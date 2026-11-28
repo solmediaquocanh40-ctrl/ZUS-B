@@ -1,8 +1,30 @@
-# ZUS 1.4.11 (gói com.anhdang.zalounseen)
+# ZUS 1.4.12 (gói com.anhdang.zalounseen)
 
 Tweak chích vào Zalo trên máy đã jailbreak: đọc tin nhắn mà bên kia không thấy
 "đã xem" — đoạn chat vẫn giữ chữ đậm như chưa đọc — kèm tắt "đang nhập...",
 chặn "đã nhận", chống thu hồi, ẩn đã xem Story và bộ công cụ danh bạ riêng.
+
+## Tương thích & hiệu quả thật
+
+- **Máy dùng được**: iPhone XR/XS → iPhone 14 Pro Max (chip A12–A16, jailbreak
+  Dopamine); iPhone 6s → iPhone X (chip A9–A11, jailbreak palera1n).
+- **iOS**: 15.1 trở lên (Zalo bản mới yêu cầu iOS 15.1+); trần theo loại
+  jailbreak — Dopamine tới 16.6.1 tuỳ dòng máy (A15/A16 tới 16.5.x), palera1n
+  tới 17.x. iPhone 15 trở lên (chip A17+) chưa có jailbreak nên chưa dùng được.
+- **Hiệu quả thật theo loại jailbreak** (cả ba scheme dùng chung một bộ code,
+  chỉ khác nhau ở mức đã kiểm chứng):
+  - **Rootless (Dopamine): ~95% — ĐÃ TEST MÁY THẬT** trên iPhone 12 Pro /
+    iOS 16.3.1 / Zalo 26.11.02.1: toàn bộ chức năng riêng tư cốt lõi (45 cửa
+    chặn, kho thu hồi, khoá Face ID, xác nhận trước khi gọi, bộ màu, sao lưu)
+    đều có bằng chứng máy thật. Phần chưa trọn: chặn cuộc gọi đến theo từng
+    số (cửa chưa từng bắt được trên máy thật), chặn quảng cáo + cảnh báo
+    link (đang ở mức dò).
+  - **Roothide: dự kiến ~90%** — cùng nền rootless, chỉ khác cách giấu
+    jailbreak; chưa có máy test riêng.
+  - **Rootful (palera1n, iOS 15+): dự kiến ~80%** — cùng bộ code, đường dẫn
+    hệ thống cổ điển; chưa test máy thật.
+  - **iOS 12–14: 0% — KHÔNG hỗ trợ**: Zalo trên các iOS này là thế hệ cũ
+    (ví dụ 25.03.02), toàn bộ điểm móc khác hẳn bản hiện tại.
 
 ## Tính năng
 

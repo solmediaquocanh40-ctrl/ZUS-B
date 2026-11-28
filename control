@@ -1,6 +1,6 @@
 Package: com.anhdang.zalounseen
 Name: ZUS
-Version: 1.4.11
+Version: 1.4.12
 Architecture: iphoneos-arm
 Description: Đọc tin nhắn Zalo "tàng hình" — bên kia không thấy đã xem, danh sách chat vẫn in đậm như chưa đọc.
  ZUS là tweak dành cho Zalo trên máy đã jailbreak, giúp bạn đọc tin nhắn theo cách riêng tư nhất: người gửi không hề biết bạn đã đọc.
@@ -18,6 +18,16 @@ Description: Đọc tin nhắn Zalo "tàng hình" — bên kia không thấy đ�
  • Sao lưu và khôi phục danh bạ (JSON/CSV/vCard), xuất và nhập lại toàn bộ cài đặt ZUS.
  • Bảng điều khiển ZUS ngay trong Zalo — mở bằng nút nổi hoặc ấn giữ thanh tab, đổi được màu giao diện.
  • Tự cảnh báo khi Zalo cập nhật phiên bản mới, kèm nhật ký chẩn đoán chi tiết để dễ kiểm tra.
+ .
+ Tương thích:
+ • Máy: iPhone XR/XS tới iPhone 14 Pro Max (chip A12–A16) với Dopamine; iPhone 6s tới iPhone X (chip A9–A11) với palera1n.
+ • iOS: từ 15.1 trở lên (Zalo bản mới yêu cầu vậy) — tối đa 16.6.1 với Dopamine, tới 17.x với palera1n tuỳ dòng máy. Máy chưa jailbreak hoặc iOS 12–14 thì không dùng được.
+ .
+ Hiệu quả thật theo loại jailbreak (cả ba dùng chung một bộ code):
+ • Rootless (Dopamine): khoảng 95% — đã test máy thật trên iPhone 12 Pro, iOS 16.3.1, Zalo bản mới nhất; các chức năng riêng tư cốt lõi đều chạy thật.
+ • Roothide: dự kiến khoảng 90% — cùng nền rootless, chưa có máy test riêng.
+ • Rootful (palera1n, iOS 15 trở lên): dự kiến khoảng 80% — chưa test máy thật.
+ • iOS 12–14: 0% — không hỗ trợ, vì Zalo trên các iOS này là thế hệ cũ khác hẳn.
  .
  Lưu ý: khi bạn trả lời tin nhắn, đoạn chat tự chuyển thành đã xem — đúng như Zalo gốc. Gỡ ZUS trong Sileo là Zalo trở lại bình thường ngay.
  .
