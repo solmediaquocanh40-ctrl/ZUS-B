@@ -1,4 +1,15 @@
-// ZUS 1.4.12 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.4.13 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+//
+// 1.4.13 — SỬA VĂNG APP KHI MỞ ZALO (anh chốt 2026-11-28):
+// móc ẩn tab của 1.4.11 tra hàm gốc theo chuỗi thừa kế nên
+// khi hàm ghi đè của Zalo gọi super, móc lớp cha lấy nhầm
+// hàm gốc lớp con → hai bên gọi nhau vô hạn, tràn stack,
+// app chết sau mốc +9s (log 15:32 cả 3 phiên). Bản này bỏ
+// kho tra chung: mỗi (lớp, method) một hàm móc riêng trong
+// bể 8 suất cho mỗi biến thể, hàm gốc nằm ngay trong suất;
+// quét lớp con chỉ trong app Zalo (bỏ lớp hệ thống); nhận
+// diện thanh chính nhìn thêm VC trong navigation controller.
+// Ngoài vùng ẩn tab và số phiên bản: không đổi gì so 1.4.12.
 //
 // 1.4.12 — MÔ TẢ GÓI: THÊM MỤC TƯƠNG THÍCH + HIỆU QUẢ THẬT
 // (anh chốt 2026-11-28): mô tả trong control (hiện ở Sileo) và
@@ -2965,7 +2976,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.4.12";
+    prof[@"_version"] = @"1.4.13";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -3924,7 +3935,7 @@ static UIImage *ZUSOrbHeroImage(void) {
             @{@"kind": @"action", @"title": @"Xem nhật ký", @"act": @"logview", @"icon": @"log"},
             @{@"kind": @"action", @"title": @"Báo cáo lỗi (.ips)", @"act": @"crashlist", @"icon": @"warn"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.12 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.13 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -5365,24 +5376,26 @@ static void ZUSApplyTabHiding(void) {
 // con của UITabBarController đã nạp trong tiến trình, lớp con
 // nào tự ghi đè một trong hai method gán tab thì móc ngay trên
 // lớp con đó (lớp cha vẫn móc cả hai cửa như cũ).
-// 1.4.11: hàm gốc của method gán tab lưu RIÊNG theo từng lớp đã
-// móc (khoá "TênLớp|tênMethod") — mỗi lớp con ghi đè có một hàm
-// gốc khác nhau. Lúc chạy, tra từ lớp của đối tượng ngược lên
-// chuỗi thừa kế: bắt được cả trường hợp đối tượng thuộc lớp con
-// không ghi đè (đi qua móc của lớp cha).
-static NSMutableDictionary *gTabOrigs = nil;
+// 1.4.13: 1.4.11/1.4.12 VĂNG Zalo — lỗi thiết kế của chính phần
+// tra hàm gốc: hàm gốc lưu chung một kho, tra bằng cách đi ngược
+// chuỗi thừa kế từ lớp của đối tượng. Khi hàm ghi đè của Zalo
+// gọi [super setViewControllers:] thì quyền điều khiển về móc
+// của LỚP CHA nhưng đối tượng vẫn là lớp con → tra ra hàm gốc
+// của LỚP CON → hai bên gọi qua lại vô hạn tới tràn stack
+// (log 28/11: cả 3 phiên chết ngay sau mốc +9s, khi đường áp cũ
+// gán lại danh sách tab). Bản này bỏ hẳn kho tra chung: mỗi
+// (lớp, method) được móc dùng một hàm móc RIÊNG trong bể suất
+// dưới đây, hàm gốc của suất nào nằm ngay trong suất đó — móc
+// lớp cha chỉ gọi đúng hàm gốc lớp cha, hết đường gọi nhầm.
+// Phạm vi quét cũng thu hẹp: chỉ móc lớp con nằm trong chính
+// app Zalo (bỏ qua lớp hệ thống StoreKit/Photos/SwiftUI), và
+// nhận diện thanh chính nhìn thêm một tầng vào navigation
+// controller bọc ngoài VC của tab.
 
-static IMP ZUSTabOrigFor(id self, SEL _cmd) {
-    for (Class c = [self class]; c; c = class_getSuperclass(c)) {
-        NSValue *v = gTabOrigs[[NSString stringWithFormat:@"%@|%@", NSStringFromClass(c), NSStringFromSelector(_cmd)]];
-        if (v) return (IMP)[v pointerValue];
-    }
-    return NULL;
-}
-
-static void ZUSTabSetVCsHook(__unsafe_unretained id self, SEL _cmd, NSArray *vcs) {
-    IMP orig = ZUSTabOrigFor(self, _cmd);
-    if (!orig) return;
+// Lọc danh sách tab nếu đây là thanh tab chính và có tab cần ẩn —
+// trả về danh sách sẽ trao cho hàm gốc (đã lọc hoặc nguyên vẹn).
+// Logic lọc giữ nguyên như móc 1.4.8 đã chạy từ trước.
+static NSArray *ZUSTabFilterCommon(id self, NSArray *vcs, BOOL animated) {
     if ((gHideTabDiscover || gHideTabTimeline) && [vcs isKindOfClass:[NSArray class]] && vcs.count) {
         BOOL isMain = NO;
         UIWindow *win = nil;
@@ -5395,6 +5408,12 @@ static void ZUSTabSetVCsHook(__unsafe_unretained id self, SEL _cmd, NSArray *vcs
         if (!isMain) {
             for (UIViewController *vc in vcs) {
                 if ([NSStringFromClass([vc class]) containsString:@"Connector"]) { isMain = YES; break; }
+                // 1.4.13: tab thường được bọc trong navigation
+                // controller — nhìn thêm VC trên cùng của nó.
+                if ([vc isKindOfClass:[UINavigationController class]]) {
+                    UIViewController *top = ((UINavigationController *)vc).topViewController;
+                    if (top && [NSStringFromClass([top class]) containsString:@"Connector"]) { isMain = YES; break; }
+                }
             }
         }
         if (isMain) {
@@ -5404,67 +5423,86 @@ static void ZUSTabSetVCsHook(__unsafe_unretained id self, SEL _cmd, NSArray *vcs
                 gZUSTabCtl = (UITabBarController *)self;
                 gZUSTabOrigVCs = vcs;
                 gZUSTabAppliedState = [NSString stringWithFormat:@"d%d-t%d", gHideTabDiscover, gHideTabTimeline];
-                ZUSLog(@"ẩn tab: lọc ngay lúc Zalo gán tab (chưa kịp hiện) — lớp %@, ẩn %d, còn %lu", NSStringFromClass([self class]), hidden, (unsigned long)keep.count);
-                ((void (*)(__unsafe_unretained id, SEL, NSArray *))orig)(self, _cmd, keep);
-                return;
+                ZUSLog(@"ẩn tab: lọc ngay lúc Zalo gán tab (chưa kịp hiện) — lớp %@%@, ẩn %d, còn %lu", NSStringFromClass([self class]), animated ? @" (animated)" : @"", hidden, (unsigned long)keep.count);
+                return keep;
             }
         }
     }
-    ((void (*)(__unsafe_unretained id, SEL, NSArray *))orig)(self, _cmd, vcs);
+    return vcs;
 }
 
-// 1.4.11: biến thể có hiệu ứng của method gán tab — logic lọc y
-// hệt móc thường ở trên, chỉ khác chữ ký (thêm cờ animated, phải
-// chuyển tiếp đúng cho hàm gốc).
-static void ZUSTabSetVCsAnimHook(__unsafe_unretained id self, SEL _cmd, NSArray *vcs, BOOL animated) {
-    IMP orig = ZUSTabOrigFor(self, _cmd);
-    if (!orig) return;
-    if ((gHideTabDiscover || gHideTabTimeline) && [vcs isKindOfClass:[NSArray class]] && vcs.count) {
-        BOOL isMain = NO;
-        UIWindow *win = nil;
-        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (![scene isKindOfClass:[UIWindowScene class]]) continue;
-            for (UIWindow *w in ((UIWindowScene *)scene).windows) if (w.isKeyWindow) { win = w; break; }
-            if (win) break;
-        }
-        if (win.rootViewController == self) isMain = YES;
-        if (!isMain) {
-            for (UIViewController *vc in vcs) {
-                if ([NSStringFromClass([vc class]) containsString:@"Connector"]) { isMain = YES; break; }
-            }
-        }
-        if (isMain) {
-            int hidden = 0;
-            NSArray *keep = ZUSFilteredTabVCs(vcs, &hidden);
-            if (hidden > 0 && keep.count) {
-                gZUSTabCtl = (UITabBarController *)self;
-                gZUSTabOrigVCs = vcs;
-                gZUSTabAppliedState = [NSString stringWithFormat:@"d%d-t%d", gHideTabDiscover, gHideTabTimeline];
-                ZUSLog(@"ẩn tab: lọc ngay lúc Zalo gán tab (chưa kịp hiện) — lớp %@ (animated), ẩn %d, còn %lu", NSStringFromClass([self class]), hidden, (unsigned long)keep.count);
-                ((void (*)(__unsafe_unretained id, SEL, NSArray *, BOOL))orig)(self, _cmd, keep, animated);
-                return;
-            }
-        }
+// 1.4.13: bể hàm móc riêng — mỗi suất giữ hàm gốc của đúng một
+// (lớp, method) đã móc. TUYỆT ĐỐI không tra hàm gốc theo đối
+// tượng hay lớp tại thời điểm chạy (bài học văng 1.4.12: móc
+// lớp cha bị gọi qua đường super của lớp con sẽ lấy nhầm hàm
+// gốc của lớp con và lặp vô hạn).
+#define ZUS_TAB_POOL 8
+static IMP gTabOrigPlainPool[ZUS_TAB_POOL];
+static IMP gTabOrigAnimPool[ZUS_TAB_POOL];
+
+#define ZUS_TAB_PLAIN_TRAMP(N) \
+    static void ZUSTabPlain##N(__unsafe_unretained id self, SEL _cmd, NSArray *vcs) { \
+        IMP o = gTabOrigPlainPool[N]; \
+        if (!o) return; \
+        ((void (*)(__unsafe_unretained id, SEL, NSArray *))o)(self, _cmd, ZUSTabFilterCommon(self, vcs, NO)); \
     }
-    ((void (*)(__unsafe_unretained id, SEL, NSArray *, BOOL))orig)(self, _cmd, vcs, animated);
-}
+ZUS_TAB_PLAIN_TRAMP(0)
+ZUS_TAB_PLAIN_TRAMP(1)
+ZUS_TAB_PLAIN_TRAMP(2)
+ZUS_TAB_PLAIN_TRAMP(3)
+ZUS_TAB_PLAIN_TRAMP(4)
+ZUS_TAB_PLAIN_TRAMP(5)
+ZUS_TAB_PLAIN_TRAMP(6)
+ZUS_TAB_PLAIN_TRAMP(7)
 
-// 1.4.11: lắp một móc gán tab lên một lớp cụ thể + lưu hàm gốc
-// của đúng lớp đó vào kho.
-static void ZUSHookTabSetter(Class cls, SEL sel, IMP hook) {
-    if (!class_getInstanceMethod(cls, sel)) return;
+#define ZUS_TAB_ANIM_TRAMP(N) \
+    static void ZUSTabAnim##N(__unsafe_unretained id self, SEL _cmd, NSArray *vcs, BOOL animated) { \
+        IMP o = gTabOrigAnimPool[N]; \
+        if (!o) return; \
+        ((void (*)(__unsafe_unretained id, SEL, NSArray *, BOOL))o)(self, _cmd, ZUSTabFilterCommon(self, vcs, YES), animated); \
+    }
+ZUS_TAB_ANIM_TRAMP(0)
+ZUS_TAB_ANIM_TRAMP(1)
+ZUS_TAB_ANIM_TRAMP(2)
+ZUS_TAB_ANIM_TRAMP(3)
+ZUS_TAB_ANIM_TRAMP(4)
+ZUS_TAB_ANIM_TRAMP(5)
+ZUS_TAB_ANIM_TRAMP(6)
+ZUS_TAB_ANIM_TRAMP(7)
+
+static void (*gTabPlainHooks[ZUS_TAB_POOL])(__unsafe_unretained id, SEL, NSArray *) = {
+    ZUSTabPlain0, ZUSTabPlain1, ZUSTabPlain2, ZUSTabPlain3, ZUSTabPlain4, ZUSTabPlain5, ZUSTabPlain6, ZUSTabPlain7
+};
+static void (*gTabAnimHooks[ZUS_TAB_POOL])(__unsafe_unretained id, SEL, NSArray *, BOOL) = {
+    ZUSTabAnim0, ZUSTabAnim1, ZUSTabAnim2, ZUSTabAnim3, ZUSTabAnim4, ZUSTabAnim5, ZUSTabAnim6, ZUSTabAnim7
+};
+static int gTabPlainUsed = 0;
+static int gTabAnimUsed = 0;
+
+// Lắp móc gán tab lên một lớp cụ thể bằng suất trống tiếp theo
+// của biến thể tương ứng; hàm gốc MSHookMessageEx trả về được
+// cất ngay vào đúng suất đó.
+static void ZUSHookTabSetter(Class cls, SEL sel, BOOL animated) {
+    int *used = animated ? &gTabAnimUsed : &gTabPlainUsed;
+    IMP *pool = animated ? gTabOrigAnimPool : gTabOrigPlainPool;
+    if (*used >= ZUS_TAB_POOL) {
+        ZUSLog(@"ẩn tab: HẾT suất móc cho %@ trên lớp %@ — bỏ qua lớp này", NSStringFromSelector(sel), NSStringFromClass(cls));
+        return;
+    }
+    int slot = *used;
+    IMP hook = animated ? (IMP)gTabAnimHooks[slot] : (IMP)gTabPlainHooks[slot];
     IMP orig = NULL;
     MSHookMessageEx(cls, sel, hook, (IMP *)&orig);
     if (!orig) return;
-    gTabOrigs[[NSString stringWithFormat:@"%@|%@", NSStringFromClass(cls), NSStringFromSelector(sel)]] = [NSValue valueWithPointer:(void *)orig];
-    ZUSLog(@"ẩn tab: đã móc %@ trên lớp %@", NSStringFromSelector(sel), NSStringFromClass(cls));
+    pool[slot] = orig;
+    *used = slot + 1;
+    ZUSLog(@"ẩn tab: đã móc %@ trên lớp %@ (suất %d)", NSStringFromSelector(sel), NSStringFromClass(cls), slot);
 }
 
 static void ZUSInstallTabHideHook(void) {
     static BOOL done = NO;
     if (done) return;
     done = YES;
-    if (!gTabOrigs) gTabOrigs = [NSMutableDictionary dictionary];
     Class base = [UITabBarController class];
     SEL sPlain = @selector(setViewControllers:);
     SEL sAnim = @selector(setViewControllers:animated:);
@@ -5475,34 +5513,37 @@ static void ZUSInstallTabHideHook(void) {
     // biết lớp con nào thật sự tự ghi đè (hàm của nó khác hàm này).
     IMP basePlain = method_getImplementation(mPlain);
     IMP baseAnim = mAnim ? method_getImplementation(mAnim) : NULL;
-    ZUSHookTabSetter(base, sPlain, (IMP)ZUSTabSetVCsHook);
-    if (mAnim) ZUSHookTabSetter(base, sAnim, (IMP)ZUSTabSetVCsAnimHook);
-    // Quét mọi lớp đã nạp trong tiến trình: lớp con nào của
-    // UITabBarController tự ghi đè method gán tab thì móc thêm
-    // ngay trên lớp con đó (lớp con chỉ thừa kế thì móc lớp cha
-    // ở trên đã bao phủ, không móc trùng).
+    ZUSHookTabSetter(base, sPlain, NO);
+    if (mAnim) ZUSHookTabSetter(base, sAnim, YES);
+    // Quét mọi lớp đã nạp: lớp con nào của UITabBarController
+    // nằm trong chính app Zalo và tự ghi đè method gán tab thì
+    // móc thêm ngay trên lớp con đó (lớp con chỉ thừa kế thì
+    // móc lớp cha ở trên đã bao phủ, không móc trùng).
+    NSString *appPath = [[NSBundle mainBundle] bundlePath];
     int n = objc_getClassList(NULL, 0);
     if (n > 0) {
         Class *buf = (Class *)malloc(sizeof(Class) * (unsigned)n);
         if (buf) {
-            n = objc_getClassList(buf, n);
+            int copied = objc_getClassList(buf, n);
+            if (copied < n) n = copied;
             for (int i = 0; i < n; i++) {
                 Class c = buf[i];
                 if (!c || c == base) continue;
                 BOOL isSub = NO;
                 for (Class p = class_getSuperclass(c); p; p = class_getSuperclass(p)) if (p == base) { isSub = YES; break; }
                 if (!isSub) continue;
+                NSBundle *cb = [NSBundle bundleForClass:c];
+                if (!cb || ![cb.bundlePath hasPrefix:appPath]) continue;
                 Method mp = class_getInstanceMethod(c, sPlain);
-                if (mp && method_getImplementation(mp) != basePlain) ZUSHookTabSetter(c, sPlain, (IMP)ZUSTabSetVCsHook);
+                if (mp && method_getImplementation(mp) != basePlain) ZUSHookTabSetter(c, sPlain, NO);
                 Method ma = class_getInstanceMethod(c, sAnim);
-                if (ma && baseAnim && method_getImplementation(ma) != baseAnim) ZUSHookTabSetter(c, sAnim, (IMP)ZUSTabSetVCsAnimHook);
+                if (ma && baseAnim && method_getImplementation(ma) != baseAnim) ZUSHookTabSetter(c, sAnim, YES);
             }
             free(buf);
         }
     }
     ZUSLog(@"ẩn tab: đã móc gán danh sách tab của thanh tab (lọc trước khi hiện)");
 }
-
 // ----- 1.1.5: cảnh báo link đáng ngờ (tính năng dò — ghi log mọi URL gặp
 // được để hiệu chỉnh; chỉ bật cảnh báo khi anh gạt công tắc riêng) -----
 static NSMutableDictionary *gLinkOrigs = nil;
@@ -7262,7 +7303,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.4.12 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.4.13 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
