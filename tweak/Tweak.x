@@ -1,36 +1,16 @@
-// ZUS 1.4.13 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.4.14 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
 //
-// 1.4.13 — SỬA VĂNG APP KHI MỞ ZALO (anh chốt 2026-11-28):
-// móc ẩn tab của 1.4.11 tra hàm gốc theo chuỗi thừa kế nên
-// khi hàm ghi đè của Zalo gọi super, móc lớp cha lấy nhầm
-// hàm gốc lớp con → hai bên gọi nhau vô hạn, tràn stack,
-// app chết sau mốc +9s (log 15:32 cả 3 phiên). Bản này bỏ
-// kho tra chung: mỗi (lớp, method) một hàm móc riêng trong
-// bể 8 suất cho mỗi biến thể, hàm gốc nằm ngay trong suất;
-// quét lớp con chỉ trong app Zalo (bỏ lớp hệ thống); nhận
-// diện thanh chính nhìn thêm VC trong navigation controller.
-// Ngoài vùng ẩn tab và số phiên bản: không đổi gì so 1.4.12.
-//
-// 1.4.12 — MÔ TẢ GÓI: THÊM MỤC TƯƠNG THÍCH + HIỆU QUẢ THẬT
-// (anh chốt 2026-11-28): mô tả trong control (hiện ở Sileo) và
-// README ghi thêm: máy dùng được (XR/XS → 14 Pro Max với
-// Dopamine; 6s → X với palera1n), iOS 15.1 trở lên, và % hiệu
-// quả theo loại jailbreak — rootless ~95% (đã test máy thật
-// 12 Pro / iOS 16.3.1), roothide dự kiến ~90%, rootful
-// (palera1n, iOS 15+) dự kiến ~80%, iOS 12–14 = 0% không hỗ
-// trợ. KHÔNG đổi một dòng code nào so với 1.4.11.
-//
-// 1.4.11 — ẨN TAB: MÓC ĐÚNG CỬA ZALO THẬT SỰ DÙNG (anh chốt
-// 2026-11-28, giữ nguyên bộ code chuẩn 1.4.10 — chỉ đụng vùng
-// ẩn tab): log 1.4.10 kết án móc 1.4.8 ở lớp cha
-// UITabBarController CHƯA TỪNG chạy một lần — ẩn lúc mở lạnh
-// vẫn do mốc +9s làm (phiên 14:32:25 → ẩn 14:32:34). Bản này
-// quét mọi lớp con của UITabBarController đã nạp trong Zalo,
-// lớp con nào tự ghi đè setViewControllers: hoặc
-// setViewControllers:animated: thì móc ngay trên lớp con đó
-// (lớp cha vẫn móc cả hai cửa); hàm gốc lưu riêng theo từng
-// lớp, log ghi tên lớp đã móc + lớp nào bắt được tab. Logic
-// lọc, đường áp cũ và mốc +9s/+26s giữ nguyên làm lưới.
+// 1.4.14 — LÀM LẠI SỬA ẨN TAB TỪ BỘ CHUẨN 1.4.10 (anh chốt
+// 2026-11-28): cây nguồn quay về đúng bản chuẩn 1.4.10, chỉ
+// thêm MỘT món — móc chặn lần Zalo gán tab lúc khởi động
+// (bắt được ở khoảng giây thứ 4) để hết chớp tab khi mở
+// lạnh. Móc dùng hàm riêng cho từng (lớp, method) trong bể
+// suất, KHÔNG dùng kho tra hàm gốc chung (thứ đã làm nhánh
+// thử nghiệm trước văng app vì đường gọi super lấy nhầm
+// hàm gốc); phạm vi móc chỉ trong app Zalo. Đường gạt công
+// tắc trong bảng giữ đúng code của 1.4.10, lõi chuẩn giữ
+// nguyên từng dòng; kèm mục mô tả tương thích trong
+// control + README như đã chốt ở 1.4.12.
 //
 // 1.4.10 — NỀN CHÒM SAO DỊU LẠI + THẺ ĐẶC HƠN (anh chốt
 // phương án C 2026-11-28, giữ nguyên bộ code chuẩn 1.4.9):
@@ -2976,7 +2956,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.4.13";
+    prof[@"_version"] = @"1.4.14";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -3935,7 +3915,7 @@ static UIImage *ZUSOrbHeroImage(void) {
             @{@"kind": @"action", @"title": @"Xem nhật ký", @"act": @"logview", @"icon": @"log"},
             @{@"kind": @"action", @"title": @"Báo cáo lỗi (.ips)", @"act": @"crashlist", @"icon": @"warn"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.13 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.14 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -5368,33 +5348,23 @@ static void ZUSApplyTabHiding(void) {
 // ZUSApplyTabHiding như cũ. Nhận diện thanh tab chính: là root của
 // cửa sổ khoá, hoặc trong danh sách có VC dạng Connector (đặc trưng
 // các tab chính của Zalo).
-// 1.4.11: log 1.4.10 kết án móc lớp cha của 1.4.8 CHƯA TỪNG chạy
-// một lần nào (0 lần trong 161 nghìn dòng log) — việc ẩn lúc mở
-// lạnh vẫn do mốc +9s làm (phiên 14:32:25 → ẩn 14:32:34). Zalo
-// gán danh sách tab qua lớp con tự ghi đè method hoặc qua biến
-// thể setViewControllers:animated:. Bộ lắp móc mới quét MỌI lớp
-// con của UITabBarController đã nạp trong tiến trình, lớp con
-// nào tự ghi đè một trong hai method gán tab thì móc ngay trên
-// lớp con đó (lớp cha vẫn móc cả hai cửa như cũ).
-// 1.4.13: 1.4.11/1.4.12 VĂNG Zalo — lỗi thiết kế của chính phần
-// tra hàm gốc: hàm gốc lưu chung một kho, tra bằng cách đi ngược
-// chuỗi thừa kế từ lớp của đối tượng. Khi hàm ghi đè của Zalo
-// gọi [super setViewControllers:] thì quyền điều khiển về móc
-// của LỚP CHA nhưng đối tượng vẫn là lớp con → tra ra hàm gốc
-// của LỚP CON → hai bên gọi qua lại vô hạn tới tràn stack
-// (log 28/11: cả 3 phiên chết ngay sau mốc +9s, khi đường áp cũ
-// gán lại danh sách tab). Bản này bỏ hẳn kho tra chung: mỗi
-// (lớp, method) được móc dùng một hàm móc RIÊNG trong bể suất
-// dưới đây, hàm gốc của suất nào nằm ngay trong suất đó — móc
-// lớp cha chỉ gọi đúng hàm gốc lớp cha, hết đường gọi nhầm.
-// Phạm vi quét cũng thu hẹp: chỉ móc lớp con nằm trong chính
-// app Zalo (bỏ qua lớp hệ thống StoreKit/Photos/SwiftUI), và
-// nhận diện thanh chính nhìn thêm một tầng vào navigation
-// controller bọc ngoài VC của tab.
+// 1.4.14 (làm lại từ bộ chuẩn 1.4.10): móc lớp cha của 1.4.8
+// không bao giờ chạy vì Zalo gán tab qua lớp con
+// ZaloTabBarViewController tự ghi đè method — ẩn lúc mở lạnh
+// toàn do mốc +9s làm nên chớp tab. Bản này móc thêm ngay trên
+// các lớp con nằm trong chính app Zalo có tự ghi đè method gán
+// tab (cả biến thể setViewControllers:animated:), để lần gán
+// lúc khởi động (khoảng giây thứ 4) bị lọc trước khi thanh tab
+// dựng xong. Mỗi (lớp, method) dùng một hàm móc RIÊNG trong bể
+// suất dưới đây, hàm gốc của suất nào nằm ngay trong suất đó.
+// TUYỆT ĐỐI không tra hàm gốc theo đối tượng hay lớp tại thời
+// điểm chạy: móc lớp cha bị gọi qua đường super của lớp con sẽ
+// lấy nhầm hàm gốc của lớp con, hai bên gọi nhau vô hạn tới
+// tràn stack — bài học văng app của nhánh thử nghiệm trước.
+// Đường áp ZUSApplyTabHiding giữ nguyên của 1.4.10.
 
 // Lọc danh sách tab nếu đây là thanh tab chính và có tab cần ẩn —
 // trả về danh sách sẽ trao cho hàm gốc (đã lọc hoặc nguyên vẹn).
-// Logic lọc giữ nguyên như móc 1.4.8 đã chạy từ trước.
 static NSArray *ZUSTabFilterCommon(id self, NSArray *vcs, BOOL animated) {
     if ((gHideTabDiscover || gHideTabTimeline) && [vcs isKindOfClass:[NSArray class]] && vcs.count) {
         BOOL isMain = NO;
@@ -5408,8 +5378,8 @@ static NSArray *ZUSTabFilterCommon(id self, NSArray *vcs, BOOL animated) {
         if (!isMain) {
             for (UIViewController *vc in vcs) {
                 if ([NSStringFromClass([vc class]) containsString:@"Connector"]) { isMain = YES; break; }
-                // 1.4.13: tab thường được bọc trong navigation
-                // controller — nhìn thêm VC trên cùng của nó.
+                // Tab thường được bọc trong navigation controller
+                // — nhìn thêm VC trên cùng của nó.
                 if ([vc isKindOfClass:[UINavigationController class]]) {
                     UIViewController *top = ((UINavigationController *)vc).topViewController;
                     if (top && [NSStringFromClass([top class]) containsString:@"Connector"]) { isMain = YES; break; }
@@ -5431,11 +5401,9 @@ static NSArray *ZUSTabFilterCommon(id self, NSArray *vcs, BOOL animated) {
     return vcs;
 }
 
-// 1.4.13: bể hàm móc riêng — mỗi suất giữ hàm gốc của đúng một
-// (lớp, method) đã móc. TUYỆT ĐỐI không tra hàm gốc theo đối
-// tượng hay lớp tại thời điểm chạy (bài học văng 1.4.12: móc
-// lớp cha bị gọi qua đường super của lớp con sẽ lấy nhầm hàm
-// gốc của lớp con và lặp vô hạn).
+// 1.4.14: bể hàm móc riêng — mỗi suất giữ hàm gốc của đúng một
+// (lớp, method) đã móc. Không tra hàm gốc theo đối tượng/lớp
+// tại thời điểm chạy (xem bài học ở đầu vùng này).
 #define ZUS_TAB_POOL 8
 static IMP gTabOrigPlainPool[ZUS_TAB_POOL];
 static IMP gTabOrigAnimPool[ZUS_TAB_POOL];
@@ -7303,7 +7271,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.4.13 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.4.14 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
