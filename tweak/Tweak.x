@@ -1,16 +1,16 @@
-// ZUS 1.4.14 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
+// ZUS 1.4.15 — đọc tin nhắn Zalo mà bên kia không thấy "đã xem", tắt "đang nhập...".
 //
-// 1.4.14 — LÀM LẠI SỬA ẨN TAB TỪ BỘ CHUẨN 1.4.10 (anh chốt
-// 2026-11-28): cây nguồn quay về đúng bản chuẩn 1.4.10, chỉ
-// thêm MỘT món — móc chặn lần Zalo gán tab lúc khởi động
-// (bắt được ở khoảng giây thứ 4) để hết chớp tab khi mở
-// lạnh. Móc dùng hàm riêng cho từng (lớp, method) trong bể
-// suất, KHÔNG dùng kho tra hàm gốc chung (thứ đã làm nhánh
-// thử nghiệm trước văng app vì đường gọi super lấy nhầm
-// hàm gốc); phạm vi móc chỉ trong app Zalo. Đường gạt công
-// tắc trong bảng giữ đúng code của 1.4.10, lõi chuẩn giữ
-// nguyên từng dòng; kèm mục mô tả tương thích trong
-// control + README như đã chốt ở 1.4.12.
+// 1.4.15 — ẨN TAB Ở TẦNG HÌNH (phương án A, anh chốt
+// 2026-11-28) trên nền bộ chuẩn 1.4.10: bỏ hẳn đường lọc
+// danh sách viewControllers và móc gán tab (cơ chế đã bị
+// máy thật kết án: mặt nút của thanh tab Zalo neo theo
+// vị trí gốc nên lọc mảng là lệch mặt/nội dung + tab ma).
+// Thay bằng: tìm nút tab thật trên thanh, ẩn nút của tab
+// cần ẩn + dồn đều các nút còn lại, áp lại sau mỗi lần
+// thanh vẽ lại bố cục qua móc layoutSubviews (mỗi lớp một
+// hàm móc riêng trong bể suất). Danh sách tab giữ nguyên
+// 100%; lõi chuẩn và mọi tính năng khác không đổi; kèm
+// mục mô tả tương thích trong control + README.
 //
 // 1.4.10 — NỀN CHÒM SAO DỊU LẠI + THẺ ĐẶC HƠN (anh chốt
 // phương án C 2026-11-28, giữ nguyên bộ code chuẩn 1.4.9):
@@ -2956,7 +2956,7 @@ static NSString *ZUSExportProfile(void) {
     NSMutableDictionary *prof = [NSMutableDictionary dictionary];
     for (NSString *k in ZUSAllPrefKeys()) prof[k] = @(ZUSReadBool(k, NO));
     prof[@"_app"] = @"ZUS";
-    prof[@"_version"] = @"1.4.14";
+    prof[@"_version"] = @"1.4.15";
     NSData *json = [NSJSONSerialization dataWithJSONObject:prof options:NSJSONWritingPrettyPrinted error:nil];
     NSString *path = [ZUSDocsPath() stringByAppendingPathComponent:@"ZUS-Profile.json"];
     return [json writeToFile:path atomically:YES] ? path : nil;
@@ -3915,7 +3915,7 @@ static UIImage *ZUSOrbHeroImage(void) {
             @{@"kind": @"action", @"title": @"Xem nhật ký", @"act": @"logview", @"icon": @"log"},
             @{@"kind": @"action", @"title": @"Báo cáo lỗi (.ips)", @"act": @"crashlist", @"icon": @"warn"},
         ]}];
-        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.14 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
+        [secs addObject:@{@"header": @"", @"footer": @"ZUS 1.4.15 • Thay đổi ăn ngay, không cần mở lại Zalo.", @"rows": @[
             @{@"kind": @"switch", @"title": @"Ghi log gỡ lỗi", @"key": ZUS_KEY_DEBUG, @"def": @YES},
         ]}];
     }
@@ -5271,17 +5271,25 @@ static void ZUSInstallTabBarGesture(void) {
 
 // ----- 1.3.0: ẩn tab Khám phá / Nhật ký (dạng option) -----
 // Yêu cầu của anh: KHÔNG ẩn mặc định — mỗi tab có công tắc riêng, chỉ ẩn
-// khi anh tự bật. Cách làm: giữ danh sách tab gốc đầy đủ nhất từng thấy,
-// khi có công tắc bật thì lọc bỏ tab Khám phá (TabDiscoverConnector...) /
-// Nhật ký (ZATimelineConnector...) khỏi tab bar; tắt hết thì khôi phục
-// nguyên danh sách gốc.
+// khi anh tự bật.
+// 1.4.15 — ĐỔI HẲN CƠ CHẾ sang ẨN Ở TẦNG HÌNH (anh chốt phương án A
+// 2026-11-28): cách cũ LỌC BỎ màn hình tab khỏi danh sách
+// viewControllers đã bị máy thật kết án chết hẳn — thanh tab tự chế
+// của Zalo giữ mặt nút (tên + badge) theo vị trí gốc và chỉ cắt số
+// ô theo số màn hình còn lại, nên gỡ một tab ở giữa là ô của nó
+// thành tab ma mất icon, các ô sau lệch mặt khỏi nội dung (Cá nhân
+// đeo tên Khám phá), bằng chứng ở cả hai bản 1.4.13 và 1.4.14.
+// Từ bản này: danh sách viewControllers giữ nguyên 100%, chỉ tìm
+// các NÚT TAB THẬT trên thanh, ẩn nút của tab cần ẩn và dồn đều
+// các nút còn lại; việc ẩn được áp lại sau mỗi lần thanh tự vẽ
+// lại bố cục (móc layoutSubviews bên dưới) nên có hiệu lực từ
+// khung hình đầu và không chớp.
 static __weak UITabBarController *gZUSTabCtl = nil;
-static NSArray *gZUSTabOrigVCs = nil;
-static NSString *gZUSTabAppliedState = nil;
 
-// 1.4.8: phép lọc tab tách thành hàm dùng chung — bản cũ nằm lồng
-// trong ZUSApplyTabHiding; nay móc gán-tab (bên dưới) cũng dùng để
-// hai đường lọc không bao giờ lệch nhau.
+// Nhận diện một màn hình tab có thuộc tab cần ẩn không (theo
+// tên lớp của nó / của màn hình trên cùng trong navigation) —
+// phép nhận diện đã dùng từ 1.3.0, giữ nguyên; tầng hình dùng
+// nó để ghép nút với tab theo vị trí.
 static BOOL ZUSTabVCHidden(UIViewController *vc) {
     UIViewController *top = vc;
     if ([vc isKindOfClass:[UINavigationController class]]) top = ((UINavigationController *)vc).topViewController ?: vc;
@@ -5290,227 +5298,262 @@ static BOOL ZUSTabVCHidden(UIViewController *vc) {
            (gHideTabTimeline && [cn containsString:@"Timeline"]);
 }
 
-static NSArray *ZUSFilteredTabVCs(NSArray *vcs, int *hiddenOut) {
-    NSMutableArray *keep = [NSMutableArray array];
-    int hidden = 0;
-    for (UIViewController *vc in vcs) {
-        if (ZUSTabVCHidden(vc)) hidden++; else [keep addObject:vc];
+static void ZUSEnsureBarLayoutHook(UIView *bar);
+
+// Tìm tab bar controller chính: root của cửa sổ khoá là
+// UITabBarController (cách dò của đường áp cũ, giữ nguyên).
+static UITabBarController *ZUSFindMainTabCtl(void) {
+    UIWindow *win = nil;
+    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+        if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+        for (UIWindow *w in ((UIWindowScene *)scene).windows) if (w.isKeyWindow) { win = w; break; }
+        if (win) break;
     }
-    if (hiddenOut) *hiddenOut = hidden;
-    return keep;
+    UIViewController *root = win.rootViewController;
+    if ([root isKindOfClass:[UITabBarController class]]) return (UITabBarController *)root;
+    return nil;
+}
+
+// Gom mọi nút bấm ứng viên trong cây view của thanh tab: các
+// UIControl có kích thước giống nút tab (nút tab chuẩn của iOS
+// là UITabBarButton — một UIControl; nút tự chế của Zalo nhiều
+// khả năng cũng là UIControl/UIButton).
+static void ZUSCollectTabButtons(UIView *v, NSMutableArray *out) {
+    if ([v isKindOfClass:[UIControl class]] && v.bounds.size.width >= 30 && v.bounds.size.height >= 25) {
+        [out addObject:v];
+        return;
+    }
+    for (UIView *s in v.subviews) ZUSCollectTabButtons(s, out);
+}
+
+static BOOL ZUSViewHasLabel(UIView *v, int depth) {
+    if ([v isKindOfClass:[UILabel class]]) return YES;
+    if (depth > 3) return NO;
+    for (UIView *s in v.subviews) if (ZUSViewHasLabel(s, depth + 1)) return YES;
+    return NO;
+}
+
+static BOOL ZUSViewHasImage(UIView *v, int depth) {
+    if ([v isKindOfClass:[UIImageView class]]) return YES;
+    if (depth > 3) return NO;
+    for (UIView *s in v.subviews) if (ZUSViewHasImage(s, depth + 1)) return YES;
+    return NO;
+}
+
+// Dự phòng khi không thấy UIControl nào: view có cả nhãn chữ
+// lẫn ảnh và kích thước giống nút tab (nút tự chế bằng UIView).
+static void ZUSCollectTabButtonsFallback(UIView *v, NSMutableArray *out) {
+    if (![v isKindOfClass:[UIControl class]] && v.bounds.size.width >= 30 && v.bounds.size.height >= 25 &&
+        ZUSViewHasLabel(v, 0) && ZUSViewHasImage(v, 0)) {
+        [out addObject:v];
+        return;
+    }
+    for (UIView *s in v.subviews) ZUSCollectTabButtonsFallback(s, out);
+}
+
+static NSString *ZUSTabButtonLabel(UIView *v) {
+    if ([v isKindOfClass:[UILabel class]]) return ((UILabel *)v).text;
+    for (UIView *s in v.subviews) {
+        NSString *t = ZUSTabButtonLabel(s);
+        if (t.length) return t;
+    }
+    return nil;
+}
+
+static void ZUSDumpBarTree(UIView *v, int depth, NSMutableString *out, int *lines) {
+    if (*lines > 40 || depth > 4) return;
+    (*lines)++;
+    NSMutableString *pad = [NSMutableString string];
+    for (int i = 0; i < depth; i++) [pad appendString:@"  "];
+    [out appendFormat:@"%@%@ (%.0fx%.0f)%@\n", pad, NSStringFromClass([v class]), v.bounds.size.width, v.bounds.size.height, v.hidden ? @" [ẩn]" : @""];
+    for (UIView *s in v.subviews) ZUSDumpBarTree(s, depth + 1, out, lines);
+}
+
+static NSString *gVisualTabState = nil;
+static BOOL gVisualTabApplying = NO;
+static BOOL gVisualTabDumped = NO;
+
+// Áp ẩn tab ở TẦNG HÌNH lên thanh tab của tbc: tìm các nút tab
+// thật, ghép mỗi nút với một màn hình tab (theo thứ tự trái ->
+// phải khi số nút khớp số tab; lệch số thì ghép theo nhãn chữ),
+// ẩn nút của tab cần ẩn và dồn đều các nút còn lại trong view
+// cha của chúng. Danh sách viewControllers KHÔNG bị đụng vào
+// nên mặt tab và nội dung không bao giờ lệch nhau.
+static void ZUSApplyVisualToBar(UITabBarController *tbc, BOOL fromLayout) {
+    if (!tbc || gVisualTabApplying) return;
+    UITabBar *bar = tbc.tabBar;
+    NSArray *vcs = tbc.viewControllers;
+    if (!bar || !vcs.count) return;
+    gVisualTabApplying = YES;
+    @try {
+        NSMutableArray *btns = [NSMutableArray array];
+        ZUSCollectTabButtons(bar, btns);
+        if (!btns.count) ZUSCollectTabButtonsFallback(bar, btns);
+        [btns sortUsingComparator:^NSComparisonResult(UIView *a, UIView *b) {
+            CGFloat ax = a.superview ? [bar convertRect:a.frame fromView:a.superview].origin.x : a.frame.origin.x;
+            CGFloat bx = b.superview ? [bar convertRect:b.frame fromView:b.superview].origin.x : b.frame.origin.x;
+            return ax < bx ? NSOrderedAscending : (ax > bx ? NSOrderedDescending : NSOrderedSame);
+        }];
+        BOOL wantHide = (gHideTabDiscover || gHideTabTimeline);
+        if (!btns.count) {
+            if (wantHide && !gVisualTabDumped) {
+                gVisualTabDumped = YES;
+                NSMutableString *dump = [NSMutableString string];
+                int lines = 0;
+                ZUSDumpBarTree(bar, 0, dump, &lines);
+                ZUSLog(@"ẩn tab (hình): KHÔNG tìm thấy nút tab nào trên thanh — cây view của thanh tab:\n%@", dump);
+            }
+            gVisualTabApplying = NO;
+            return;
+        }
+        NSMutableSet *hideSet = [NSMutableSet set];
+        NSString *mode = @"không ẩn";
+        if (wantHide) {
+            if (btns.count == vcs.count) {
+                mode = @"vị trí";
+                for (NSUInteger i = 0; i < vcs.count; i++) {
+                    if (ZUSTabVCHidden(vcs[i])) [hideSet addObject:btns[i]];
+                }
+            } else {
+                mode = @"nhãn chữ";
+                for (UIView *b in btns) {
+                    NSString *t = ZUSTabButtonLabel(b) ?: @"";
+                    if (gHideTabDiscover && [t containsString:@"Khám phá"]) [hideSet addObject:b];
+                    if (gHideTabTimeline && ([t containsString:@"Nhật ký"] || [t containsString:@"Tường nhà"])) [hideSet addObject:b];
+                }
+            }
+        }
+        for (UIView *b in btns) b.hidden = [hideSet containsObject:b];
+        if (hideSet.count) {
+            // Dồn đều các nút còn hiện trong từng view cha.
+            NSMutableDictionary *groups = [NSMutableDictionary dictionary];
+            for (UIView *b in btns) {
+                if (b.hidden || !b.superview) continue;
+                NSString *k = [NSString stringWithFormat:@"%p", (void *)b.superview];
+                if (!groups[k]) groups[k] = [NSMutableArray array];
+                [groups[k] addObject:b];
+            }
+            for (NSString *k in groups) {
+                NSMutableArray *g = [groups[k] mutableCopy];
+                [g sortUsingComparator:^NSComparisonResult(UIView *a, UIView *b) {
+                    return a.frame.origin.x < b.frame.origin.x ? NSOrderedAscending : (a.frame.origin.x > b.frame.origin.x ? NSOrderedDescending : NSOrderedSame);
+                }];
+                UIView *parent = ((UIView *)g[0]).superview;
+                CGFloat slotW = parent.bounds.size.width / (CGFloat)g.count;
+                if (slotW > 10) {
+                    for (NSUInteger i = 0; i < g.count; i++) {
+                        UIView *b = g[i];
+                        CGRect f = b.frame;
+                        f.origin.x = slotW * (CGFloat)i;
+                        f.size.width = slotW;
+                        b.frame = f;
+                    }
+                }
+            }
+            // Tab đang chọn mà bị ẩn thì về tab hiện đầu tiên.
+            UIViewController *sel = tbc.selectedViewController;
+            if (sel && ZUSTabVCHidden(sel)) {
+                for (NSUInteger i = 0; i < vcs.count; i++) {
+                    if (!ZUSTabVCHidden(vcs[i])) { tbc.selectedIndex = i; break; }
+                }
+            }
+        } else if (!fromLayout) {
+            // Vừa tắt hết công tắc: hẹn một lượt vẽ lại để hàm
+            // gốc của thanh tự xếp lại vị trí các nút.
+            [bar setNeedsLayout];
+        }
+        NSString *state = [NSString stringWithFormat:@"n%lu-h%lu-%@", (unsigned long)btns.count, (unsigned long)hideSet.count, mode];
+        if (![state isEqualToString:gVisualTabState]) {
+            gVisualTabState = state;
+            if (hideSet.count) {
+                NSMutableArray *names = [NSMutableArray array];
+                if (gHideTabDiscover) [names addObject:@"Khám phá"];
+                if (gHideTabTimeline) [names addObject:@"Nhật ký"];
+                ZUSLog(@"ẩn tab (hình): thanh có %lu nút, đã ẩn %lu nút (%@), %lu nút còn lại dồn đều — ghép theo %@", (unsigned long)btns.count, (unsigned long)hideSet.count, [names componentsJoinedByString:@", "], (unsigned long)(btns.count - hideSet.count), mode);
+            } else if (wantHide) {
+                ZUSLog(@"ẩn tab (hình): có %lu nút nhưng không ghép được nút nào để ẩn (ghép theo %@)", (unsigned long)btns.count, mode);
+            } else {
+                ZUSLog(@"ẩn tab (hình): đã hiện lại đủ %lu nút tab", (unsigned long)btns.count);
+            }
+        }
+    } @catch (NSException *e) { ZUSLog(@"ẩn tab (hình): lỗi áp dụng: %@", e.name); }
+    gVisualTabApplying = NO;
 }
 
 static void ZUSApplyTabHiding(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         @try {
-            UIWindow *win = nil;
-            for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-                if (![scene isKindOfClass:[UIWindowScene class]]) continue;
-                for (UIWindow *w in ((UIWindowScene *)scene).windows) if (w.isKeyWindow) { win = w; break; }
-                if (win) break;
-            }
-            UIViewController *root = win.rootViewController;
-            if (![root isKindOfClass:[UITabBarController class]]) return;
-            UITabBarController *tbc = (UITabBarController *)root;
-            if (gZUSTabCtl != tbc) { gZUSTabCtl = tbc; gZUSTabOrigVCs = nil; gZUSTabAppliedState = nil; }
-            if (!gHideTabDiscover && !gHideTabTimeline) {
-                if (gZUSTabOrigVCs && tbc.viewControllers.count != gZUSTabOrigVCs.count) {
-                    tbc.viewControllers = gZUSTabOrigVCs;
-                    ZUSLog(@"ẩn tab: đã khôi phục đủ %lu tab", (unsigned long)gZUSTabOrigVCs.count);
-                }
-                if (tbc.viewControllers.count) gZUSTabOrigVCs = tbc.viewControllers;
-                gZUSTabAppliedState = @"none";
-                return;
-            }
-            if (!gZUSTabOrigVCs || tbc.viewControllers.count > gZUSTabOrigVCs.count) gZUSTabOrigVCs = tbc.viewControllers;
-            if (!gZUSTabOrigVCs.count) return;
-            NSString *state = [NSString stringWithFormat:@"d%d-t%d", gHideTabDiscover, gHideTabTimeline];
-            if ([state isEqualToString:gZUSTabAppliedState] && tbc.viewControllers.count != gZUSTabOrigVCs.count) return;
-            int hidden = 0;
-            NSArray *keep = ZUSFilteredTabVCs(gZUSTabOrigVCs, &hidden);
-            if (hidden == 0) { gZUSTabAppliedState = state; return; }
-            if (!keep.count) { ZUSLog(@"ẩn tab: KHÔNG áp dụng — lọc xong không còn tab nào"); return; }
-            UIViewController *sel = tbc.selectedViewController;
-            tbc.viewControllers = keep;
-            if (sel && ![keep containsObject:sel]) tbc.selectedIndex = 0;
-            gZUSTabAppliedState = state;
-            ZUSLog(@"ẩn tab: đã ẩn %d tab (Khám phá=%d, Nhật ký=%d) — còn %lu tab", hidden, gHideTabDiscover, gHideTabTimeline, (unsigned long)keep.count);
-        } @catch (NSException *e) { ZUSLog(@"ẩn tab: lỗi áp dụng: %@", e.name); }
+            UITabBarController *tbc = ZUSFindMainTabCtl();
+            if (!tbc) return;
+            gZUSTabCtl = tbc;
+            ZUSEnsureBarLayoutHook(tbc.tabBar);
+            ZUSApplyVisualToBar(tbc, NO);
+        } @catch (NSException *e) { ZUSLog(@"ẩn tab (hình): lỗi áp dụng: %@", e.name); }
     });
 }
+// 1.4.15: móc layoutSubviews của thanh tab — mỗi lần thanh
+// vẽ lại bố cục (mở app, xoay máy, badge thay đổi...), ngay
+// sau khi hàm gốc xếp nút xong thì tầng hình áp lại việc ẩn.
+// Nhờ vậy việc ẩn có hiệu lực từ khung hình đầu tiên, không
+// chờ mốc hẹn, và sống sót qua mọi lần Zalo tự dựng lại thanh.
+// Mỗi lớp một hàm móc riêng trong bể suất dưới đây — TUYỆT
+// ĐỐI không tra hàm gốc theo đối tượng/lớp lúc chạy (bài học
+// văng app của nhánh thử nghiệm trước).
+#define ZUS_BAR_POOL 6
+static IMP gBarLayoutOrigPool[ZUS_BAR_POOL];
+static NSMutableSet *gBarHookedClasses = nil;
+static int gBarLayoutUsed = 0;
 
-// 1.4.8: móc ngay lúc Zalo GÁN danh sách tab cho thanh tab chính —
-// lọc TRƯỚC khi danh sách tới tay hàm gốc, tab thừa không bao giờ
-// được hiển thị. Vá đúng lỗi anh báo: mở lạnh thì tab hiện nguyên
-// rồi mới ẩn, vì đường áp cũ chỉ chạy lúc nạp cài đặt (khi đó thanh
-// tab chưa dựng) và hai mốc hẹn +9s/+26s trong %ctor. Hai mốc hẹn
-// vẫn giữ làm lưới dự phòng; đường gạt công tắc trong app vẫn qua
-// ZUSApplyTabHiding như cũ. Nhận diện thanh tab chính: là root của
-// cửa sổ khoá, hoặc trong danh sách có VC dạng Connector (đặc trưng
-// các tab chính của Zalo).
-// 1.4.14 (làm lại từ bộ chuẩn 1.4.10): móc lớp cha của 1.4.8
-// không bao giờ chạy vì Zalo gán tab qua lớp con
-// ZaloTabBarViewController tự ghi đè method — ẩn lúc mở lạnh
-// toàn do mốc +9s làm nên chớp tab. Bản này móc thêm ngay trên
-// các lớp con nằm trong chính app Zalo có tự ghi đè method gán
-// tab (cả biến thể setViewControllers:animated:), để lần gán
-// lúc khởi động (khoảng giây thứ 4) bị lọc trước khi thanh tab
-// dựng xong. Mỗi (lớp, method) dùng một hàm móc RIÊNG trong bể
-// suất dưới đây, hàm gốc của suất nào nằm ngay trong suất đó.
-// TUYỆT ĐỐI không tra hàm gốc theo đối tượng hay lớp tại thời
-// điểm chạy: móc lớp cha bị gọi qua đường super của lớp con sẽ
-// lấy nhầm hàm gốc của lớp con, hai bên gọi nhau vô hạn tới
-// tràn stack — bài học văng app của nhánh thử nghiệm trước.
-// Đường áp ZUSApplyTabHiding giữ nguyên của 1.4.10.
-
-// Lọc danh sách tab nếu đây là thanh tab chính và có tab cần ẩn —
-// trả về danh sách sẽ trao cho hàm gốc (đã lọc hoặc nguyên vẹn).
-static NSArray *ZUSTabFilterCommon(id self, NSArray *vcs, BOOL animated) {
-    if ((gHideTabDiscover || gHideTabTimeline) && [vcs isKindOfClass:[NSArray class]] && vcs.count) {
-        BOOL isMain = NO;
-        UIWindow *win = nil;
-        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (![scene isKindOfClass:[UIWindowScene class]]) continue;
-            for (UIWindow *w in ((UIWindowScene *)scene).windows) if (w.isKeyWindow) { win = w; break; }
-            if (win) break;
-        }
-        if (win.rootViewController == self) isMain = YES;
-        if (!isMain) {
-            for (UIViewController *vc in vcs) {
-                if ([NSStringFromClass([vc class]) containsString:@"Connector"]) { isMain = YES; break; }
-                // Tab thường được bọc trong navigation controller
-                // — nhìn thêm VC trên cùng của nó.
-                if ([vc isKindOfClass:[UINavigationController class]]) {
-                    UIViewController *top = ((UINavigationController *)vc).topViewController;
-                    if (top && [NSStringFromClass([top class]) containsString:@"Connector"]) { isMain = YES; break; }
-                }
-            }
-        }
-        if (isMain) {
-            int hidden = 0;
-            NSArray *keep = ZUSFilteredTabVCs(vcs, &hidden);
-            if (hidden > 0 && keep.count) {
-                gZUSTabCtl = (UITabBarController *)self;
-                gZUSTabOrigVCs = vcs;
-                gZUSTabAppliedState = [NSString stringWithFormat:@"d%d-t%d", gHideTabDiscover, gHideTabTimeline];
-                ZUSLog(@"ẩn tab: lọc ngay lúc Zalo gán tab (chưa kịp hiện) — lớp %@%@, ẩn %d, còn %lu", NSStringFromClass([self class]), animated ? @" (animated)" : @"", hidden, (unsigned long)keep.count);
-                return keep;
-            }
-        }
+#define ZUS_BAR_TRAMP(N) \
+    static void ZUSBarLayout##N(__unsafe_unretained id self, SEL _cmd) { \
+        IMP o = gBarLayoutOrigPool[N]; \
+        if (o) ((void (*)(__unsafe_unretained id, SEL))o)(self, _cmd); \
+        UITabBarController *tbc = ZUSFindMainTabCtl(); \
+        if (tbc && (UIView *)tbc.tabBar == (UIView *)self) ZUSApplyVisualToBar(tbc, YES); \
     }
-    return vcs;
-}
+ZUS_BAR_TRAMP(0)
+ZUS_BAR_TRAMP(1)
+ZUS_BAR_TRAMP(2)
+ZUS_BAR_TRAMP(3)
+ZUS_BAR_TRAMP(4)
+ZUS_BAR_TRAMP(5)
 
-// 1.4.14: bể hàm móc riêng — mỗi suất giữ hàm gốc của đúng một
-// (lớp, method) đã móc. Không tra hàm gốc theo đối tượng/lớp
-// tại thời điểm chạy (xem bài học ở đầu vùng này).
-#define ZUS_TAB_POOL 8
-static IMP gTabOrigPlainPool[ZUS_TAB_POOL];
-static IMP gTabOrigAnimPool[ZUS_TAB_POOL];
-
-#define ZUS_TAB_PLAIN_TRAMP(N) \
-    static void ZUSTabPlain##N(__unsafe_unretained id self, SEL _cmd, NSArray *vcs) { \
-        IMP o = gTabOrigPlainPool[N]; \
-        if (!o) return; \
-        ((void (*)(__unsafe_unretained id, SEL, NSArray *))o)(self, _cmd, ZUSTabFilterCommon(self, vcs, NO)); \
-    }
-ZUS_TAB_PLAIN_TRAMP(0)
-ZUS_TAB_PLAIN_TRAMP(1)
-ZUS_TAB_PLAIN_TRAMP(2)
-ZUS_TAB_PLAIN_TRAMP(3)
-ZUS_TAB_PLAIN_TRAMP(4)
-ZUS_TAB_PLAIN_TRAMP(5)
-ZUS_TAB_PLAIN_TRAMP(6)
-ZUS_TAB_PLAIN_TRAMP(7)
-
-#define ZUS_TAB_ANIM_TRAMP(N) \
-    static void ZUSTabAnim##N(__unsafe_unretained id self, SEL _cmd, NSArray *vcs, BOOL animated) { \
-        IMP o = gTabOrigAnimPool[N]; \
-        if (!o) return; \
-        ((void (*)(__unsafe_unretained id, SEL, NSArray *, BOOL))o)(self, _cmd, ZUSTabFilterCommon(self, vcs, YES), animated); \
-    }
-ZUS_TAB_ANIM_TRAMP(0)
-ZUS_TAB_ANIM_TRAMP(1)
-ZUS_TAB_ANIM_TRAMP(2)
-ZUS_TAB_ANIM_TRAMP(3)
-ZUS_TAB_ANIM_TRAMP(4)
-ZUS_TAB_ANIM_TRAMP(5)
-ZUS_TAB_ANIM_TRAMP(6)
-ZUS_TAB_ANIM_TRAMP(7)
-
-static void (*gTabPlainHooks[ZUS_TAB_POOL])(__unsafe_unretained id, SEL, NSArray *) = {
-    ZUSTabPlain0, ZUSTabPlain1, ZUSTabPlain2, ZUSTabPlain3, ZUSTabPlain4, ZUSTabPlain5, ZUSTabPlain6, ZUSTabPlain7
+static void (*gBarLayoutHooks[ZUS_BAR_POOL])(__unsafe_unretained id, SEL) = {
+    ZUSBarLayout0, ZUSBarLayout1, ZUSBarLayout2, ZUSBarLayout3, ZUSBarLayout4, ZUSBarLayout5
 };
-static void (*gTabAnimHooks[ZUS_TAB_POOL])(__unsafe_unretained id, SEL, NSArray *, BOOL) = {
-    ZUSTabAnim0, ZUSTabAnim1, ZUSTabAnim2, ZUSTabAnim3, ZUSTabAnim4, ZUSTabAnim5, ZUSTabAnim6, ZUSTabAnim7
-};
-static int gTabPlainUsed = 0;
-static int gTabAnimUsed = 0;
 
-// Lắp móc gán tab lên một lớp cụ thể bằng suất trống tiếp theo
-// của biến thể tương ứng; hàm gốc MSHookMessageEx trả về được
-// cất ngay vào đúng suất đó.
-static void ZUSHookTabSetter(Class cls, SEL sel, BOOL animated) {
-    int *used = animated ? &gTabAnimUsed : &gTabPlainUsed;
-    IMP *pool = animated ? gTabOrigAnimPool : gTabOrigPlainPool;
-    if (*used >= ZUS_TAB_POOL) {
-        ZUSLog(@"ẩn tab: HẾT suất móc cho %@ trên lớp %@ — bỏ qua lớp này", NSStringFromSelector(sel), NSStringFromClass(cls));
+static void ZUSHookBarLayoutOnClass(Class cls) {
+    if (!cls) return;
+    if (!gBarHookedClasses) gBarHookedClasses = [NSMutableSet set];
+    NSString *name = NSStringFromClass(cls);
+    if ([gBarHookedClasses containsObject:name]) return;
+    if (!class_getInstanceMethod(cls, @selector(layoutSubviews))) return;
+    if (gBarLayoutUsed >= ZUS_BAR_POOL) {
+        ZUSLog(@"ẩn tab (hình): HẾT suất móc layout cho lớp %@", name);
         return;
     }
-    int slot = *used;
-    IMP hook = animated ? (IMP)gTabAnimHooks[slot] : (IMP)gTabPlainHooks[slot];
+    int slot = gBarLayoutUsed;
     IMP orig = NULL;
-    MSHookMessageEx(cls, sel, hook, (IMP *)&orig);
+    MSHookMessageEx(cls, @selector(layoutSubviews), (IMP)gBarLayoutHooks[slot], (IMP *)&orig);
     if (!orig) return;
-    pool[slot] = orig;
-    *used = slot + 1;
-    ZUSLog(@"ẩn tab: đã móc %@ trên lớp %@ (suất %d)", NSStringFromSelector(sel), NSStringFromClass(cls), slot);
+    gBarLayoutOrigPool[slot] = orig;
+    gBarLayoutUsed = slot + 1;
+    [gBarHookedClasses addObject:name];
+    ZUSLog(@"ẩn tab (hình): đã móc layoutSubviews của %@ (suất %d)", name, slot);
+}
+
+// Thanh tab của Zalo có thể là lớp con tự chế — lần đầu dò
+// thấy thanh thật thì móc luôn trên đúng lớp của nó.
+static void ZUSEnsureBarLayoutHook(UIView *bar) {
+    if (bar) ZUSHookBarLayoutOnClass([bar class]);
 }
 
 static void ZUSInstallTabHideHook(void) {
     static BOOL done = NO;
     if (done) return;
     done = YES;
-    Class base = [UITabBarController class];
-    SEL sPlain = @selector(setViewControllers:);
-    SEL sAnim = @selector(setViewControllers:animated:);
-    Method mPlain = class_getInstanceMethod(base, sPlain);
-    if (!mPlain) return;
-    Method mAnim = class_getInstanceMethod(base, sAnim);
-    // Ghi lại hàm gốc của lớp cha TRƯỚC khi móc — mốc so sánh để
-    // biết lớp con nào thật sự tự ghi đè (hàm của nó khác hàm này).
-    IMP basePlain = method_getImplementation(mPlain);
-    IMP baseAnim = mAnim ? method_getImplementation(mAnim) : NULL;
-    ZUSHookTabSetter(base, sPlain, NO);
-    if (mAnim) ZUSHookTabSetter(base, sAnim, YES);
-    // Quét mọi lớp đã nạp: lớp con nào của UITabBarController
-    // nằm trong chính app Zalo và tự ghi đè method gán tab thì
-    // móc thêm ngay trên lớp con đó (lớp con chỉ thừa kế thì
-    // móc lớp cha ở trên đã bao phủ, không móc trùng).
-    NSString *appPath = [[NSBundle mainBundle] bundlePath];
-    int n = objc_getClassList(NULL, 0);
-    if (n > 0) {
-        Class *buf = (Class *)malloc(sizeof(Class) * (unsigned)n);
-        if (buf) {
-            int copied = objc_getClassList(buf, n);
-            if (copied < n) n = copied;
-            for (int i = 0; i < n; i++) {
-                Class c = buf[i];
-                if (!c || c == base) continue;
-                BOOL isSub = NO;
-                for (Class p = class_getSuperclass(c); p; p = class_getSuperclass(p)) if (p == base) { isSub = YES; break; }
-                if (!isSub) continue;
-                NSBundle *cb = [NSBundle bundleForClass:c];
-                if (!cb || ![cb.bundlePath hasPrefix:appPath]) continue;
-                Method mp = class_getInstanceMethod(c, sPlain);
-                if (mp && method_getImplementation(mp) != basePlain) ZUSHookTabSetter(c, sPlain, NO);
-                Method ma = class_getInstanceMethod(c, sAnim);
-                if (ma && baseAnim && method_getImplementation(ma) != baseAnim) ZUSHookTabSetter(c, sAnim, YES);
-            }
-            free(buf);
-        }
-    }
-    ZUSLog(@"ẩn tab: đã móc gán danh sách tab của thanh tab (lọc trước khi hiện)");
+    ZUSHookBarLayoutOnClass([UITabBar class]);
+    ZUSLog(@"ẩn tab (hình): đã móc layout của thanh tab (ẩn ở tầng hình, không lọc danh sách tab)");
 }
 // ----- 1.1.5: cảnh báo link đáng ngờ (tính năng dò — ghi log mọi URL gặp
 // được để hiệu chỉnh; chỉ bật cảnh báo khi anh gạt công tắc riêng) -----
@@ -7271,7 +7314,7 @@ static void ZUSShowActivationPopup(void) {
         if (!gLiteMode) { ZUSInstallLinkHooks(); ZUSInstallAdDiscovery(); }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(26 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ZUSApplyTabHiding(); });
-        ZUSLog(@"ZUS 1.4.14 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
+        ZUSLog(@"ZUS 1.4.15 nạp vào Zalo (bật=%d, unseen=%d, ẩn đang nhập=%d, lite=%d)", gEnabled, gUnseen, gHideTyping, gLiteMode);
         {
             NSDictionary *fp0 = ZUSReadFilePrefs();
             id fe0 = fp0[ZUS_KEY_ENABLED];
