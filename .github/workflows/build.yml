@@ -67,5 +67,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ZUS-1.4.12-${{ matrix.name }}
+          name: ZUS-1.4.13-${{ matrix.name }}
           path: packages/*.deb
