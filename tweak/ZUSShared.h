@@ -17,6 +17,9 @@
 #define ZUS_KEY_ANTIRECALL @"antiRecall"
 #define ZUS_KEY_AWAKE     @"keepAwake"
 #define ZUS_KEY_INAPP     @"inAppUI"
+// 1.4.18: vị trí nút mắt trong chat — tâm nút theo tỉ lệ (0..1) của khung chat.
+#define ZUS_KEY_EYEPOSX   @"eyePosX"
+#define ZUS_KEY_EYEPOSY   @"eyePosY"
 #define ZUS_KEY_LONGTAB   @"longPressTab"
 #define ZUS_KEY_STORYDL   @"storyDownload"
 #define ZUS_KEY_SHIELD    @"privacyShield"

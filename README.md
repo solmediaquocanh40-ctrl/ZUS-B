@@ -1,8 +1,14 @@
-# ZUS 1.4.17 (gói com.anhdang.zalounseen)
+# ZUS 1.4.18 (gói com.anhdang.zalounseen)
 
 Tweak chích vào Zalo trên máy đã jailbreak: đọc tin nhắn mà bên kia không thấy
 "đã xem" — đoạn chat vẫn giữ chữ đậm như chưa đọc — kèm tắt "đang nhập...",
 chặn "đã nhận", chống thu hồi, ẩn đã xem Story và bộ công cụ danh bạ riêng.
+
+## Cập nhật 1.4.18
+
+- Nút mở bảng trong màn hình chat: hình mới — con mắt tím vũ trụ (thay bản cũ cắt từ logo, bị dính một mảnh chữ trắng).
+- Nút kéo thả được: chạm nhẹ vẫn mở bảng; kéo thật (qua ngưỡng) thì di chuyển tự do trong khung chat (có chặn mép), thả ra tự dính mép trái/phải gần nhất và nhớ vị trí cho mọi đoạn chat.
+- Nền tảng: bộ code chuẩn 1.4.17 — ngoài vùng nút trong chat, mọi cơ chế giữ nguyên.
 
 ## Tương thích & hiệu quả thật
 
